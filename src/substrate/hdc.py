@@ -2,49 +2,66 @@ import numpy as np
 import typing as t
 import os
 
-# Real Neural Foundation
-try:
-    from sentence_transformers import SentenceTransformer
-except ImportError:
-    SentenceTransformer = None
+# ── Custom Encoder Foundation ─────────────────────────────────────────────────
+# Uses Training Tee's own encoder + tokenizer. Zero external model dependencies.
+
+import sys
+import torch
+
+_NEURAL_DIR = os.path.join(os.path.dirname(__file__), '..', 'neural')
+sys.path.insert(0, _NEURAL_DIR)
+
+from tokenizer import TrainingTeeTokenizer
+from encoder import TrainingTeeEncoder
+
+_MODEL_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'models'))
+
 
 class HDCSubstrate:
-    """Provides real semantic encoding and HDC operations for associative memory."""
-    def __init__(self, dimension: int = 384, model_name: str = "all-MiniLM-L6-v2",
-                 encoder_timeout: float = 30.0):
+    """Provides real semantic encoding using Training Tee's custom encoder."""
+
+    def __init__(self, dimension: int = 128):
         self.dimension = dimension
         self.model = None
-        if SentenceTransformer:
-            import threading
-            result = [None]
-            err = [None]
-            def _load():
-                try:
-                    result[0] = SentenceTransformer(model_name)
-                except Exception as e:
-                    err[0] = e
-            t = threading.Thread(target=_load, daemon=True)
-            t.start()
-            t.join(timeout=encoder_timeout)
-            if t.is_alive():
-                print(f"[Substrate] Encoder load timed out after {encoder_timeout}s — using fast fallback")
-            elif err[0]:
-                print(f"[Substrate] Encoder load failed ({err[0]}) — using fast fallback")
-            else:
-                self.model = result[0]
-                self.dimension = self.model.get_sentence_embedding_dimension()
-                print(f"[Substrate] Encoder ready ({model_name})")
-        if self.model is None:
-            print(f"[Substrate] Running in fast-fallback mode (hash-based HDC, dim={self.dimension})")
+        self.tokenizer = None
+        self._device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        tok_path = os.path.join(_MODEL_DIR, 'tokenizer.json')
+        enc_path = os.path.join(_MODEL_DIR, 'encoder.pt')
+
+        if os.path.exists(tok_path) and os.path.exists(enc_path):
+            try:
+                self.tokenizer = TrainingTeeTokenizer.load(tok_path)
+                self.model = TrainingTeeEncoder(
+                    vocab_size=self.tokenizer.vocab_size,
+                    d_model=128, out_dim=128, nhead=4,
+                    num_layers=4, dim_feedforward=256, dropout=0.0,
+                ).to(self._device)
+                self.model.load_state_dict(
+                    torch.load(enc_path, map_location=self._device, weights_only=True)
+                )
+                self.model.eval()
+                self.dimension = 128
+                print(f"[Substrate] Custom encoder ready (128-dim, vocab={self.tokenizer.vocab_size})")
+            except Exception as e:
+                print(f"[Substrate] Custom encoder load failed ({e}) — using hash fallback")
+                self.model = None
+                self.tokenizer = None
+        else:
+            print(f"[Substrate] No trained models found — using hash-based HDC fallback (dim={self.dimension})")
 
     def encode(self, text: str) -> np.ndarray:
-        """Converts raw text into a real semantic vector."""
-        if self.model:
-            return self.model.encode(text)
+        """Converts raw text into a semantic vector using the custom encoder."""
+        if self.model and self.tokenizer:
+            ids = self.tokenizer.encode(text, max_len=128)
+            t_ids = torch.tensor([ids], dtype=torch.long, device=self._device)
+            with torch.no_grad():
+                vec = self.model(t_ids).squeeze(0).cpu().numpy()
+            return vec
         return self._hash_encode(text)
 
     def _hash_encode(self, text: str) -> np.ndarray:
-        """Deterministic hash-based HDC encoding. Same text → same vector."""
+        """Deterministic hash-based HDC encoding. Same text -> same vector."""
         import hashlib
         words = text.lower().split()
         vec = np.zeros(self.dimension, dtype=np.float32)
@@ -82,11 +99,10 @@ class HDCSubstrate:
         return np.roll(v, shift)
 
     def similarity(self, v1: np.ndarray, v2: np.ndarray) -> float:
-        """Cosine similarity between two hypervectors. Supports both real-valued unit vectors and bipolar vectors."""
-        if self.model:
-            # Real embeddings are normalized unit vectors by default from encode()
-            return float(np.dot(v1, v2))
-        return np.dot(v1, v2) / self.dimension
+        """Cosine similarity between two vectors."""
+        # Custom encoder outputs L2-normalized vectors
+        return float(np.dot(v1, v2))
+
 
 class AssociativeMemory:
     """A simple associative memory store using HDC."""

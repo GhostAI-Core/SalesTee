@@ -1,5 +1,5 @@
 """
-Steve Encoder — small transformer, text → 128-dim normalized vector.
+Training Tee Encoder — small transformer, text → 128-dim normalized vector.
 Trained with InfoNCE contrastive loss on (description, content) pairs.
 No external model dependencies after training.
 """
@@ -26,7 +26,7 @@ class PositionalEncoding(nn.Module):
         return self.drop(x)
 
 
-class SteveEncoder(nn.Module):
+class TrainingTeeEncoder(nn.Module):
     """
     Transformer encoder: token IDs → 128-dim L2-normalized vector.
 

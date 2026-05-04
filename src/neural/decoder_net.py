@@ -1,5 +1,5 @@
 """
-Steve Decoder — transformer decoder, latent vector → text.
+Training Tee Decoder — transformer decoder, latent vector → text.
 Conditioned on the encoder output at every layer via cross-attention.
 """
 
@@ -9,7 +9,7 @@ import torch.nn.functional as F
 import math
 
 
-class SteveDecoder(nn.Module):
+class TrainingTeeDecoder(nn.Module):
     """
     Autoregressive transformer decoder conditioned on a latent vector.
 

@@ -1,5 +1,5 @@
 """
-Steve Tokenizer — word-level, built from Steve's own corpus.
+Training Tee Tokenizer — word-level, built from Training Tee's own corpus.
 No external dependencies. Handles both prose and code vocabulary.
 """
 
@@ -31,7 +31,7 @@ _NO_CAP = frozenset({
 
 # Words that always appear in a specific case
 _FIXED_CASE = {
-    'steve': 'Steve', 'datag': 'DataG', 'datag.': 'DataG.',
+    'training_tee': 'Training Tee', 'datag': 'DataG', 'datag.': 'DataG.',
     'v1': 'v1', 'hdc': 'HDC', 'bos': 'BOS', 'eos': 'EOS',
 }
 
@@ -93,9 +93,9 @@ def _tokenize(text: str) -> list[str]:
     return [t.lower() for t in tokens if t.strip()]
 
 
-class SteveTokenizer:
+class TrainingTeeTokenizer:
     """
-    Word-level tokenizer built from Steve's seed corpus.
+    Word-level tokenizer built from Training Tee's seed corpus.
     Vocab is frozen after build — add cells, then rebuild.
     """
 
@@ -106,7 +106,7 @@ class SteveTokenizer:
 
     # ── Build ─────────────────────────────────────────────────────────────────
 
-    def build(self, texts: list[str], min_freq: int = 1) -> 'SteveTokenizer':
+    def build(self, texts: list[str], min_freq: int = 1) -> 'TrainingTeeTokenizer':
         """Build vocab from a list of texts."""
         freq: dict[str, int] = {}
         for text in texts:
@@ -148,7 +148,7 @@ class SteveTokenizer:
             json.dump({'token2id': self.token2id}, f)
 
     @classmethod
-    def load(cls, path: str) -> 'SteveTokenizer':
+    def load(cls, path: str) -> 'TrainingTeeTokenizer':
         tok = cls()
         with open(path) as f:
             data = json.load(f)

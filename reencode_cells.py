@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-reencode_cells.py — Replace MiniLM (384-dim) DNA vectors with SteveEncoder (128-dim).
+reencode_cells.py — Replace MiniLM (384-dim) DNA vectors with TrainingTeeEncoder (128-dim).
 
-Run after train_steve.py:
+Run after train_training_tee.py:
     python reencode_cells.py
 """
 
@@ -14,8 +14,8 @@ import glob
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 import torch
-from tokenizer import SteveTokenizer
-from encoder import SteveEncoder
+from tokenizer import TrainingTeeTokenizer
+from encoder import TrainingTeeEncoder
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), 'models')
 METH_DIR  = os.path.join(os.path.dirname(__file__), 'data_store', 'methodology')
@@ -23,8 +23,8 @@ DEVICE    = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def load_model():
-    tok     = SteveTokenizer.load(os.path.join(MODEL_DIR, 'tokenizer.json'))
-    encoder = SteveEncoder(vocab_size=tok.vocab_size, d_model=128, out_dim=128,
+    tok     = TrainingTeeTokenizer.load(os.path.join(MODEL_DIR, 'tokenizer.json'))
+    encoder = TrainingTeeEncoder(vocab_size=tok.vocab_size, d_model=128, out_dim=128,
                             nhead=4, num_layers=4, dim_feedforward=256)
     encoder.load_state_dict(torch.load(os.path.join(MODEL_DIR, 'encoder.pt'),
                                         map_location=DEVICE))
@@ -33,7 +33,7 @@ def load_model():
 
 
 @torch.no_grad()
-def encode(text: str, tok: SteveTokenizer, encoder: SteveEncoder) -> list:
+def encode(text: str, tok: TrainingTeeTokenizer, encoder: TrainingTeeEncoder) -> list:
     ids   = tok.encode(text, max_len=128)
     tens  = torch.tensor([ids], dtype=torch.long, device=DEVICE)
     vec   = encoder(tens).squeeze(0).cpu().numpy()
@@ -41,7 +41,7 @@ def encode(text: str, tok: SteveTokenizer, encoder: SteveEncoder) -> list:
 
 
 def main():
-    print("Loading SteveEncoder…")
+    print("Loading TrainingTeeEncoder…")
     tok, encoder = load_model()
 
     files   = glob.glob(os.path.join(METH_DIR, 'meth_*.json'))

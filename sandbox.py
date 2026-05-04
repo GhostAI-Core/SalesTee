@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-sandbox.py — Steve × Qwen interaction sandbox.
+sandbox.py — Training Tee × Qwen interaction sandbox.
 
 DeepSeek plays: junior TTS/STT developer transitioning from warehousing.
-Steve responds: via his own substrate (encoder → cosine search → decoder).
+Training Tee responds: via his own substrate (encoder → cosine search → decoder).
 
 Usage:
     python sandbox.py [--turns N] [--model qwen2.5-coder:7b]
@@ -41,12 +41,12 @@ Your personality:
 - You ask basic but sincere questions
 - You sometimes confuse terminology (e.g., "tokens" vs "phonemes", "latency" vs "lag")
 - You have real practical ideas from your logistics background (batching, queuing, throughput)
-- You genuinely want to learn from Steve and share what little you know
+- You genuinely want to learn from Training Tee and share what little you know
 
 Your goal in this conversation:
 - Share something you've been working on or thinking about (TTS/STT related)
-- Ask Steve for ideas, methods, or ways to improve
-- React to Steve's responses naturally — build on them, ask follow-ups
+- Ask Training Tee for ideas, methods, or ways to improve
+- React to Training Tee's responses naturally — build on them, ask follow-ups
 - Keep each message to 3-5 sentences max, conversational tone
 
 Do NOT break character. Do NOT be overly technical. You are Marcus, the former warehouse guy.
@@ -54,22 +54,22 @@ Start by introducing yourself briefly and sharing what you're currently stuck on
 """.strip()
 
 
-# ── Steve interface ────────────────────────────────────────────────────────────
+# ── Training Tee interface ────────────────────────────────────────────────────────────
 
-def load_steve():
-    """Load Steve's bridge — returns bridge instance."""
-    print("[Sandbox] Loading Steve…", flush=True)
+def load_training_tee():
+    """Load Training Tee's bridge — returns bridge instance."""
+    print("[Sandbox] Loading Training Tee…", flush=True)
     from datag_bridge import DataGBridge
     bridge = DataGBridge.get()
     if not bridge.ready:
-        raise RuntimeError("Steve's substrate failed to load")
-    print(f"[Sandbox] Steve online — {len(bridge.substrate.methodology_cells)} cells", flush=True)
+        raise RuntimeError("Training Tee's substrate failed to load")
+    print(f"[Sandbox] Training Tee online — {len(bridge.substrate.methodology_cells)} cells", flush=True)
     return bridge
 
 
-def steve_respond(bridge, message: str) -> str:
+def training_tee_respond(bridge, message: str) -> str:
     """
-    Route a message through Steve's actual architecture.
+    Route a message through Training Tee's actual architecture.
     Tries field_read (semantic lookup + decoder), falls back gracefully.
     """
     response = bridge.field_read(message, k=5)
@@ -120,14 +120,14 @@ def strip_think(text: str) -> str:
 def analyse(log: dict) -> str:
     turns       = log["turns"]
     total_turns = len(turns)
-    steve_lens  = [len(t["steve"].split()) for t in turns]
+    training_tee_lens  = [len(t["training_tee"].split()) for t in turns]
     ds_lens     = [len(t["deepseek"].split()) for t in turns]
-    avg_steve   = sum(steve_lens) / max(len(steve_lens), 1)
+    avg_training_tee   = sum(training_tee_lens) / max(len(training_tee_lens), 1)
     avg_ds      = sum(ds_lens)    / max(len(ds_lens), 1)
 
-    # Detect Steve failures (fallback response or very short)
+    # Detect Training Tee failures (fallback response or very short)
     failures = [i+1 for i, t in enumerate(turns)
-                if len(t["steve"].split()) < 4 or "run the code" in t["steve"].lower()]
+                if len(t["training_tee"].split()) < 4 or "run the code" in t["training_tee"].lower()]
 
     # Topics mentioned in DeepSeek's messages
     tts_stt_kw  = ["tts", "stt", "speech", "voice", "audio", "phoneme", "latency",
@@ -145,17 +145,17 @@ def analyse(log: dict) -> str:
         "  SANDBOX ANALYSIS",
         "=" * 60,
         f"  Turns completed  : {total_turns}",
-        f"  Steve avg words  : {avg_steve:.1f}  (per response)",
+        f"  Training Tee avg words  : {avg_training_tee:.1f}  (per response)",
         f"  Marcus avg words : {avg_ds:.1f}  (per message)",
-        f"  Steve failures   : {len(failures)} {'(turns: ' + str(failures) + ')' if failures else '(none)'}",
+        f"  Training Tee failures   : {len(failures)} {'(turns: ' + str(failures) + ')' if failures else '(none)'}",
         f"  Domain topics    : {', '.join(sorted(topics)) or 'none detected'}",
         "",
-        "  STEVE RESPONSES",
+        "  TRAINING_TEE RESPONSES",
         "  " + "-" * 40,
     ]
     for i, t in enumerate(turns):
         tag = "⚠" if (i+1) in failures else "✓"
-        lines.append(f"  {tag} Turn {i+1:02d}: {t['steve'][:80]!r}")
+        lines.append(f"  {tag} Turn {i+1:02d}: {t['training_tee'][:80]!r}")
 
     lines += [
         "",
@@ -163,11 +163,11 @@ def analyse(log: dict) -> str:
         "  " + "-" * 40,
     ]
     if len(failures) == 0:
-        lines.append("  Steve held the conversation without failures.")
+        lines.append("  Training Tee held the conversation without failures.")
     elif len(failures) <= total_turns // 3:
-        lines.append("  Steve managed most turns. Substrate needs more cells in TTS/STT domain.")
+        lines.append("  Training Tee managed most turns. Substrate needs more cells in TTS/STT domain.")
     else:
-        lines.append("  Steve struggled. Needs TTS/STT seed cells added to the substrate.")
+        lines.append("  Training Tee struggled. Needs TTS/STT seed cells added to the substrate.")
 
     lines.append("=" * 60)
     return "\n".join(lines)
@@ -187,12 +187,12 @@ def main():
     log_txt  = os.path.join(LOG_DIR, f"sandbox_{ts}.txt")
 
     print(f"\n{'='*60}")
-    print(f"  STEVE × QWEN SANDBOX")
+    print(f"  TRAINING_TEE × QWEN SANDBOX")
     print(f"  Turns: {args.turns}  |  Model: {args.model}")
     print(f"{'='*60}\n")
 
-    # Load Steve
-    bridge = load_steve()
+    # Load Training Tee
+    bridge = load_training_tee()
 
     # DeepSeek message history (system + conversation)
     ds_history = [{"role": "system", "content": DEEPSEEK_SYSTEM}]
@@ -202,13 +202,13 @@ def main():
         "model":     args.model,
         "turns":     [],
         "metadata":  {
-            "steve_cells": len(bridge.substrate.methodology_cells),
+            "training_tee_cells": len(bridge.substrate.methodology_cells),
             "planned_turns": args.turns,
         }
     }
     transcript_lines = [
         f"SANDBOX SESSION — {ts}",
-        f"Steve cells: {len(bridge.substrate.methodology_cells)} | Model: {args.model}",
+        f"Training Tee cells: {len(bridge.substrate.methodology_cells)} | Model: {args.model}",
         "=" * 60,
         "",
     ]
@@ -226,18 +226,18 @@ def main():
         # Add to history
         ds_history.append({"role": "assistant", "content": ds_clean})
 
-        # ── Steve responds ────────────────────────────────────────────────
-        print(f"  [Steve]  searching substrate…", end=" ", flush=True)
+        # ── Training Tee responds ────────────────────────────────────────────────
+        print(f"  [Training Tee]  searching substrate…", end=" ", flush=True)
         t0      = time.time()
-        steve_r = steve_respond(bridge, ds_clean)
+        training_tee_r = training_tee_respond(bridge, ds_clean)
         s_lat   = time.time() - t0
         print(f"({s_lat*1000:.0f}ms)")
-        print(f"\n  Steve:   {textwrap.fill(steve_r, width=70, subsequent_indent='          ')}\n")
+        print(f"\n  Training Tee:   {textwrap.fill(training_tee_r, width=70, subsequent_indent='          ')}\n")
 
-        # Feed Steve's response back so DeepSeek can react to it
+        # Feed Training Tee's response back so DeepSeek can react to it
         ds_history.append({
             "role": "user",
-            "content": f"Steve says: \"{steve_r}\""
+            "content": f"Training Tee says: \"{training_tee_r}\""
         })
 
         # Log turn
@@ -245,8 +245,8 @@ def main():
             "turn":    turn_n,
             "deepseek": ds_clean,
             "deepseek_latency": round(ds_lat, 2),
-            "steve":   steve_r,
-            "steve_latency_ms": round(s_lat * 1000, 1),
+            "training_tee":   training_tee_r,
+            "training_tee_latency_ms": round(s_lat * 1000, 1),
         }
         log["turns"].append(turn_entry)
 
@@ -255,8 +255,8 @@ def main():
             f"MARCUS ({ds_lat:.1f}s):",
             textwrap.fill(ds_clean, width=72, initial_indent="  ", subsequent_indent="  "),
             "",
-            f"STEVE ({s_lat*1000:.0f}ms):",
-            textwrap.fill(steve_r, width=72, initial_indent="  ", subsequent_indent="  "),
+            f"TRAINING_TEE ({s_lat*1000:.0f}ms):",
+            textwrap.fill(training_tee_r, width=72, initial_indent="  ", subsequent_indent="  "),
             "",
             "-" * 60,
             "",

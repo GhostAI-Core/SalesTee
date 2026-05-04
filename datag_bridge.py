@@ -1,17 +1,17 @@
 """
-DataG Bridge — Steve's Memory Backend
+DataG Bridge — Training Tee's Memory Backend
 =======================================
-Connects Steve's neuronal architecture to the substrate.
+Connects Training Tee's neuronal architecture to the substrate.
 
-Encoding:  SteveEncoder (128-dim, trained on Steve's own cells)
-Decoding:  SteveDecoder (generates text from latent vector)
+Encoding:  TrainingTeeEncoder (128-dim, trained on Training Tee's own cells)
+Decoding:  TrainingTeeDecoder (generates text from latent vector)
 Storage:   LivingCell methodology cells in data_store/methodology/
 Retrieval: Cosine similarity field walk
 
 Cell source_table labels:
-  meth_identity     — who Steve is
-  meth_code         — code patterns Steve knows
-  meth_reasoning    — how Steve thinks
+  meth_identity     — who Training Tee is
+  meth_code         — code patterns Training Tee knows
+  meth_reasoning    — how Training Tee thinks
   meth_conversation — learned during live conversation (future)
 
 Used by:
@@ -27,11 +27,11 @@ import json
 import time
 import numpy as np
 
-_STEVE_ROOT = os.path.dirname(os.path.abspath(__file__))
-_DATAG_SRC  = os.path.abspath(os.path.join(_STEVE_ROOT, '..', 'DataG', 'src'))
-_DATAG_ROOT = os.path.abspath(os.path.join(_STEVE_ROOT, '..', 'DataG'))
-_MODEL_DIR  = os.path.join(_STEVE_ROOT, 'models')
-_SRC_DIR    = os.path.join(_STEVE_ROOT, 'src')
+_TRAINING_TEE_ROOT = os.path.dirname(os.path.abspath(__file__))
+_DATAG_SRC  = os.path.abspath(os.path.join(_TRAINING_TEE_ROOT, '..', 'DataG', 'src'))
+_DATAG_ROOT = os.path.abspath(os.path.join(_TRAINING_TEE_ROOT, '..', 'DataG'))
+_MODEL_DIR  = os.path.join(_TRAINING_TEE_ROOT, 'models')
+_SRC_DIR    = os.path.join(_TRAINING_TEE_ROOT, 'src')
 
 for p in (_DATAG_SRC, _DATAG_ROOT, _SRC_DIR):
     if p not in sys.path:
@@ -40,10 +40,10 @@ for p in (_DATAG_SRC, _DATAG_ROOT, _SRC_DIR):
 
 class DataGBridge:
     """
-    Singleton bridge to Steve's substrate.
+    Singleton bridge to Training Tee's substrate.
     Loaded once at startup, shared across all neurons.
 
-    Encoding is fully handled by SteveEncoder — no external model dependency.
+    Encoding is fully handled by TrainingTeeEncoder — no external model dependency.
     """
     _instance = None
 
@@ -56,9 +56,9 @@ class DataGBridge:
     def __init__(self):
         self._ready    = False
         self.substrate = None
-        self._enc      = None   # SteveEncoder
-        self._dec      = None   # SteveDecoder
-        self._tok      = None   # SteveTokenizer
+        self._enc      = None   # TrainingTeeEncoder
+        self._dec      = None   # TrainingTeeDecoder
+        self._tok      = None   # TrainingTeeTokenizer
         self._device   = 'cpu'
         self._load()
 
@@ -72,48 +72,72 @@ class DataGBridge:
             import traceback; traceback.print_exc()
 
     def _load_substrate(self):
-        from system import AgenticSystem
         print("[Bridge] Loading substrate…", flush=True)
-        self.substrate = AgenticSystem(hdc_dim=384, slim=True, skip_cells=True)
+        sys.path.insert(0, os.path.join(_TRAINING_TEE_ROOT, 'src'))
+        from living_cell import LivingCell
+
+        meth_dir = os.path.join(_TRAINING_TEE_ROOT, 'data_store', 'methodology')
+
+        class _Substrate:
+            def __init__(self):
+                self.methodology_cells = {}
+
+        sub = _Substrate()
+        for fname in os.listdir(meth_dir):
+            if not fname.endswith('.json'):
+                continue
+            path = os.path.join(meth_dir, fname)
+            try:
+                with open(path) as f:
+                    data = json.load(f)
+                cell = LivingCell.from_dict(data)
+                sub.methodology_cells[cell.cell_id] = cell
+            except Exception as e:
+                print(f"[Bridge] Skipped {fname}: {e}")
+
+        self.substrate = sub
         print(f"[Bridge] {len(self.substrate.methodology_cells):,} cells online", flush=True)
 
     def _load_models(self):
         import torch
-        from tokenizer import SteveTokenizer
-        from encoder import SteveEncoder
-        from decoder_net import SteveDecoder
+        _neural = os.path.join(_TRAINING_TEE_ROOT, 'src', 'neural')
+        if _neural not in sys.path:
+            sys.path.insert(0, _neural)
+        from tokenizer import TrainingTeeTokenizer
+        from encoder import TrainingTeeEncoder
+        from decoder_net import TrainingTeeDecoder
 
         tok_path = os.path.join(_MODEL_DIR, 'tokenizer.json')
         enc_path = os.path.join(_MODEL_DIR, 'encoder.pt')
         dec_path = os.path.join(_MODEL_DIR, 'decoder.pt')
 
         if not all(os.path.exists(p) for p in (tok_path, enc_path, dec_path)):
-            print("[Bridge] Models not found — run train_steve.py first")
+            print("[Bridge] Models not found — run train_training_tee.py first")
             return
 
         self._device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self._tok    = SteveTokenizer.load(tok_path)
+        self._tok    = TrainingTeeTokenizer.load(tok_path)
 
-        self._enc = SteveEncoder(
+        self._enc = TrainingTeeEncoder(
             vocab_size=self._tok.vocab_size, d_model=128, out_dim=128,
             nhead=4, num_layers=4, dim_feedforward=256,
         )
         self._enc.load_state_dict(torch.load(enc_path, map_location=self._device))
         self._enc.to(self._device).eval()
 
-        self._dec = SteveDecoder(
+        self._dec = TrainingTeeDecoder(
             vocab_size=self._tok.vocab_size, latent_dim=128, d_model=128,
             nhead=4, num_layers=4, dim_feedforward=256,
         )
         self._dec.load_state_dict(torch.load(dec_path, map_location=self._device))
         self._dec.to(self._device).eval()
 
-        print(f"[Bridge] SteveEncoder + SteveDecoder loaded ({self._device})")
+        print(f"[Bridge] TrainingTeeEncoder + TrainingTeeDecoder loaded ({self._device})")
 
     # ── Encoding ─────────────────────────────────────────────────────────────
 
     def encode(self, text: str) -> np.ndarray:
-        """Text → 128-dim L2-normalised vector via SteveEncoder."""
+        """Text → 128-dim L2-normalised vector via TrainingTeeEncoder."""
         if self._enc is None:
             raise RuntimeError("Encoder not loaded")
         import torch
@@ -232,7 +256,7 @@ class DataGBridge:
                   source_table: str = 'conversation',
                   confidence: float = 0.85, energy: float = 120.0) -> str:
         """
-        Encode + persist a new cell to Steve's substrate.
+        Encode + persist a new cell to Training Tee's substrate.
         Returns the cell_id.
 
         source_table should be one of:
@@ -262,7 +286,7 @@ class DataGBridge:
             "birth_time":       time.time(),
             "meta":             {"description": description},
         }
-        path = os.path.join(_STEVE_ROOT, 'data_store', 'methodology', f"{cid}.json")
+        path = os.path.join(_TRAINING_TEE_ROOT, 'data_store', 'methodology', f"{cid}.json")
         with open(path, 'w') as f:
             _json.dump(cell, f)
 

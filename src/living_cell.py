@@ -24,7 +24,7 @@ class LivingCell:
     
     # Small adapter dimensions — enough to encode meaning shifts
     ADAPTER_RANK = 4
-    DNA_DIM = 384  # matches sentence-transformers output
+    DNA_DIM = 128  # matches custom TrainingTeeEncoder output
     
     def __init__(self, cell_id: str, content: str = "", source_table: str = "",
                  confidence: float = 1.0, source: str = "dictionary"):
