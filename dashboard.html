@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataG | Neural Sovereign Dashboard</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono&display=swap"
+        rel="stylesheet">
+    <style>
+        body {
+            background: #050505;
+            color: #eee;
+            font-family: 'Outfit', sans-serif;
+            overflow: hidden;
+            margin: 0;
+            touch-action: none;
+        }
+
+        .glass {
+            background: rgba(10, 10, 10, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .neon-text {
+            color: #00ffb4;
+            text-shadow: 0 0 10px rgba(0, 255, 180, 0.4);
+        }
+
+        .neon-border {
+            border: 1px solid rgba(0, 255, 180, 0.3);
+            box-shadow: 0 0 15px rgba(0, 255, 180, 0.1);
+        }
+
+        .glow-bg {
+            background: radial-gradient(circle at 50% 50%, #0c1a14 0%, #050505 100%);
+        }
+
+        .kinetic-bar {
+            height: 4px;
+            background: #111;
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .kinetic-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #00ffb4, #3b82f6);
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Mobile Performance Optimizations & Layout */
+        @media (max-width: 768px) {
+            .desktop-only {
+                display: none !important;
+            }
+
+            .mobile-bottom-bar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                z-index: 100;
+                border-top-left-radius: 24px;
+                border-top-right-radius: 24px;
+            }
+
+            .mobile-header {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                z-index: 90;
+            }
+
+            main {
+                padding-top: 80px !important;
+                padding-bottom: 120px !important;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+    </style>
+</head>
+
+<body class="glow-bg min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        const API_BASE = "https://menadic-ciara-petiolar.ngrok-free.dev";
+
+        const ShadowDiffMatrix = ({ teacher, student, iaTruth }) => {
+            if (!teacher && !student) return <div className="text-xs opacity-30 mt-10 text-center uppercase tracking-widest animate-pulse">Waiting for organic signal...</div>;
+
+            const allKeys = Array.from(new Set([...Object.keys(teacher || {}), ...Object.keys(student || {})]));
+            const safeStringify = (val) => typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
+
+            return (
+                <div className="flex-1 w-full overflow-y-auto space-y-4 pr-3 pb-4">
+                    {allKeys.map(key => {
+                        const tVal = teacher?.[key];
+                        const sVal = student?.[key];
+
+                        const tStr = typeof tVal === 'object' ? JSON.stringify(tVal, null, 2) : String(tVal);
+                        const sStr = typeof sVal === 'object' ? JSON.stringify(sVal, null, 2) : String(sVal);
+
+                        let matchStatus = 'DIVERGENT';
+
+                        if (tStr === sStr && sVal !== undefined && tVal !== undefined) {
+                            matchStatus = 'ALIGNED';
+                        } else if (sVal !== undefined && tVal !== undefined && tStr !== 'undefined' && sStr !== 'undefined') {
+                            const getTokens = (txt) => Array.from(new Set((txt || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean)));
+                            const tTokens = getTokens(tStr);
+                            const sTokens = getTokens(sStr);
+
+                            const overlap = tTokens.filter(x => sTokens.includes(x)).length;
+                            const tCoverage = tTokens.length > 0 ? overlap / tTokens.length : 0;
+                            const sCoverage = sTokens.length > 0 ? overlap / sTokens.length : 0;
+
+                            if (Math.abs(tStr.length - sStr.length) < 50 && (tCoverage > 0.75 || sCoverage > 0.75)) {
+                                matchStatus = 'ALIGNED_SEMANTIC';
+                            } else if (key === 'location' && sStr.length > tStr.length + 10 && /\d/.test(sStr) && tCoverage >= 0.25) {
+                                matchStatus = 'EVOLVED_HIGH_RES';
+                            } else if (tCoverage > 0.65 && sStr.length > tStr.length && sStr.length < tStr.length * 3) {
+                                matchStatus = 'EVOLVED_HIGH_RES';
+                            } else if (sCoverage > 0.8 && tStr.length > sStr.length && sStr.length >= tStr.length * 0.35) {
+                                const isArrayCollapse = Array.isArray(tVal) && Array.isArray(sVal) && sVal.length < (tVal.length - 1);
+                                if (!isArrayCollapse) {
+                                    matchStatus = 'EVOLVED_NOISE_REDUCED';
+                                }
+                            }
+                        }
+
+                        const isMatch = matchStatus.startsWith('ALIGNED');
+                        const isEvolved = matchStatus.startsWith('EVOLVED');
+
+                        let borderClass = 'border-amber-500/30';
+                        if (isMatch) borderClass = 'border-white/5';
+                        else if (isEvolved) borderClass = 'border-blue-500/30';
+
+                        return (
+                            <div key={key} className={`rounded-2xl border ${borderClass} bg-black/60 p-5 transition-all shadow-lg`}>
+                                <div className="flex justify-between items-center mb-4">
+                                    <span className="text-xs font-bold text-white/80 tracking-widest uppercase bg-white/10 px-3 py-1 rounded-full">"{key}"</span>
+                                    <div className="flex gap-2 items-center">
+                                        {matchStatus === 'ALIGNED' &&
+                                            <span className="text-[10px] font-bold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.1)]">✅ PERFECT ALIGNMENT</span>
+                                        }
+                                        {matchStatus === 'ALIGNED_SEMANTIC' &&
+                                            <span className="text-[10px] font-bold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.1)]">✅ ALIGNED (SEMANTIC)</span>
+                                        }
+                                        {matchStatus === 'EVOLVED_HIGH_RES' &&
+                                            <span className="text-[10px] font-bold text-cyan-400 border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.1)]">🌟 EVOLVED (HIGH RESOLUTION)</span>
+                                        }
+                                        {matchStatus === 'EVOLVED_NOISE_REDUCED' &&
+                                            <span className="text-[10px] font-bold text-cyan-400 border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.1)]">🎯 EVOLVED (NOISE REDUCED)</span>
+                                        }
+                                        {matchStatus === 'DIVERGENT' &&
+                                            <span className="text-[10px] font-bold text-amber-400 border border-amber-500/30 bg-amber-500/10 px-3 py-1 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.1)]">⚠️ DIVERGENT</span>
+                                        }
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-3 gap-6">
+                                    <div className="bg-blue-900/10 border border-blue-500/20 rounded-xl p-4 shadow-inner">
+                                        <span className="text-[9px] font-bold text-blue-400/50 tracking-[0.15em] mb-3 block">TEACHER (STANDARD)</span>
+                                        <pre className="text-xs font-mono text-blue-300/90 whitespace-pre-wrap break-words">{tStr !== 'undefined' ? tStr : 'NULL'}</pre>
+                                    </div>
+
+                                    <div className={`rounded-xl border p-4 shadow-inner ${isMatch ? 'bg-emerald-900/10 border-emerald-500/20' :
+                                            isEvolved ? 'bg-cyan-900/10 border-cyan-500/20' :
+                                                'bg-amber-900/10 border-amber-500/20'
+                                        }`}>
+                                        <span className={`text-[9px] font-bold tracking-[0.15em] mb-3 block ${isMatch ? 'text-emerald-400/50' :
+                                                isEvolved ? 'text-cyan-400/50' :
+                                                    'text-amber-400/60'
+                                            }`}>IA SENSES (EXTRACTOR)</span>
+                                        <pre className={`text-xs font-mono whitespace-pre-wrap break-words ${isMatch ? 'text-emerald-300' :
+                                                isEvolved ? 'text-cyan-300' :
+                                                    'text-amber-300/90'
+                                            }`}>{sStr !== 'undefined' ? sStr : 'NULL'}</pre>
+                                    </div>
+
+                                    <div className="bg-purple-900/10 border border-purple-500/30 rounded-xl p-4 shadow-[0_0_15px_rgba(168,85,247,0.05)_inset] relative overflow-hidden group">
+                                        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent pointer-events-none"></div>
+                                        <span className="text-[9px] font-bold text-purple-400/70 tracking-[0.15em] mb-3 flex items-center gap-2">DATAG NATIVE PREDICTION (MEMORY) <div className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse shadow-[0_0_8px_#a855f7]"></div></span>
+                                        <pre className="text-xs font-mono text-purple-300/90 whitespace-pre-wrap break-words">{iaTruth && iaTruth[key] !== undefined ? safeStringify(iaTruth[key]) : 'AWAITING MEMORY THRESHOLD...'}</pre>
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            );
+        };
+
+        // --- EVOLVED 3D ORGANISM LATTICE ---
+        const OrganismLattice = ({ active = false, anomalyCount = 0, totalCells = 1, activeAdapters = 0, similarity = 0 }) => {
+            const canvasRef = useRef(null);
+            const animRef = useRef(0);
+            const mouseRef = useRef(null);
+            // 3D Camera matrix
+            const camRef = useRef({ zoom: 1.0, rotX: 0, rotY: 0, isDragging: false, lastX: 0, lastY: 0 });
+
+            const nodes = useMemo(() => {
+                const items = [];
+                for (let i = 0; i < 3833; i++) {
+                    const isCore = i < 200;
+                    const r = isCore ? Math.random() * 300 : Math.random() * 1800;
+                    const theta = Math.random() * 2 * Math.PI;
+                    const phi = Math.acos((Math.random() * 2) - 1);
+
+                    items.push({
+                        id: `node_${i}`,
+                        r: r,
+                        theta: theta,
+                        phi: phi,
+                        thetaSpeed: (isCore ? 0.008 : 0.002) * (Math.random() - 0.5),
+                        phiSpeed: (isCore ? 0.005 : 0.001) * (Math.random() - 0.5),
+                        color: '#ffffff',
+                        isAnomaly: false,
+                        isActiveNode: false,
+                        size: isCore ? 2 + Math.random() * 3 : 0.8 + Math.random() * 1.5,
+                    });
+                }
+                return items;
+            }, []);
+
+            useEffect(() => {
+                let baseColor = '#00ffb4';
+                if (similarity >= 0.9) baseColor = '#fbbf24';
+                else if (similarity >= 0.5) baseColor = '#8b5cf6';
+
+                // Map specific statuses natively
+                for (let i = 0; i < nodes.length; i++) {
+                    nodes[i].isAnomaly = (i < anomalyCount);
+                    nodes[i].isActiveNode = (!nodes[i].isAnomaly && i < (anomalyCount + activeAdapters));
+
+                    if (nodes[i].isAnomaly) nodes[i].color = '#ff4444';
+                    else if (nodes[i].isActiveNode) nodes[i].color = baseColor;
+                    else nodes[i].color = '#ffffff'; // Standby color
+                }
+            }, [anomalyCount, activeAdapters, nodes, similarity]);
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+
+                const resize = () => {
+                    canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+                    canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+                    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+                };
+                resize();
+                window.addEventListener('resize', resize);
+
+                const handleMouseMove = (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    mouseRef.current = { x, y };
+
+                    const cam = camRef.current;
+                    if (cam.isDragging) {
+                        // Mouse drag translates directly to true 3D globe rotation
+                        cam.rotY += (x - cam.lastX) * 0.005; // Left/Right spins Y-axis
+                        cam.rotX += (y - cam.lastY) * 0.005; // Up/Down spins X-axis
+
+                        // Limit vertical rotation to avoid flipping upside down
+                        cam.rotX = Math.max(-1.5, Math.min(1.5, cam.rotX));
+
+                        cam.lastX = x;
+                        cam.lastY = y;
+                    }
+                };
+
+                const handleMouseDown = (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const cam = camRef.current;
+                    cam.isDragging = true;
+                    cam.lastX = e.clientX - rect.left;
+                    cam.lastY = e.clientY - rect.top;
+                    canvas.style.cursor = 'grabbing';
+                };
+
+                const handleMouseUp = () => {
+                    camRef.current.isDragging = false;
+                    if (canvas) canvas.style.cursor = 'default';
+                };
+
+                const handleMouseLeave = () => {
+                    mouseRef.current = null;
+                    camRef.current.isDragging = false;
+                    if (canvas) canvas.style.cursor = 'default';
+                };
+
+                const handleWheel = (e) => {
+                    if (e.ctrlKey) e.preventDefault(); // allow scrolling but avoid pinch-zoom gestures breaking the layout
+                    const cam = camRef.current;
+                    const zoomDelta = e.deltaY * -0.001;
+                    cam.zoom = Math.min(Math.max(0.1, cam.zoom + zoomDelta), 5.0);
+                };
+
+                // MOBILE TOUCH SUPPORT
+                const handleTouchStart = (e) => {
+                    const cam = camRef.current;
+                    cam.isDragging = true;
+                    cam.lastX = e.touches[0].clientX;
+                    cam.lastY = e.touches[0].clientY;
+                };
+                const handleTouchMove = (e) => {
+                    if (!camRef.current.isDragging) return;
+                    const x = e.touches[0].clientX;
+                    const y = e.touches[0].clientY;
+                    const cam = camRef.current;
+                    cam.rotY += (x - cam.lastX) * 0.008;
+                    cam.rotX += (y - cam.lastY) * 0.008;
+                    cam.rotX = Math.max(-1.5, Math.min(1.5, cam.rotX));
+                    cam.lastX = x;
+                    cam.lastY = y;
+                };
+                const handleTouchEnd = () => { camRef.current.isDragging = false; };
+
+                canvas.addEventListener('mousemove', handleMouseMove);
+                canvas.addEventListener('mousedown', handleMouseDown);
+                window.addEventListener('mouseup', handleMouseUp);
+                canvas.addEventListener('mouseleave', handleMouseLeave);
+                canvas.addEventListener('wheel', handleWheel, { passive: false });
+
+                canvas.addEventListener('touchstart', handleTouchStart);
+                canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+                canvas.addEventListener('touchend', handleTouchEnd);
+
+                let t = 0;
+                const draw = () => {
+                    const w = canvas.offsetWidth;
+                    const h = canvas.offsetHeight;
+                    const cx = w / 2;
+                    const cy = h / 2;
+                    ctx.clearRect(0, 0, w, h);
+                    t += 0.008;
+
+                    const cam = camRef.current;
+
+                    // Apply 2D Scale for distance zoom
+                    ctx.save();
+                    ctx.translate(cx, cy);
+                    ctx.scale(cam.zoom, cam.zoom);
+                    ctx.translate(-cx, -cy);
+
+                    // Auto-increment spherical physics and map 3D projection
+                    for (const n of nodes) {
+                        // Keep them perfectly locked on their spherical radius (no pancake collapsing!)
+                        n.theta += n.thetaSpeed * (active ? 2.5 : 1);
+                        n.phi += n.phiSpeed * (active ? 2.5 : 1);
+                        if (n.phi < 0 || n.phi > Math.PI) n.phiSpeed *= -1; // Bounce off the poles
+
+                        // Spherical coordinate math
+                        let nx = n.r * Math.sin(n.phi) * Math.cos(n.theta);
+                        let ny = n.r * Math.cos(n.phi); // Y is up/down in browser space
+                        let nz = n.r * Math.sin(n.phi) * Math.sin(n.theta);
+
+                        // 3D Camera Rotation Matrix application
+                        // 1. Rotate around X-axis (Pitch / Up-Down drag)
+                        let cy1 = Math.cos(cam.rotX);
+                        let sy1 = Math.sin(cam.rotX);
+                        let y1 = ny * cy1 - nz * sy1;
+                        let z1 = ny * sy1 + nz * cy1;
+
+                        // 2. Rotate around Y-axis (Yaw / Left-Right drag)
+                        let cy2 = Math.cos(cam.rotY + (t * 0.2)); // + t*0.2 adds a slow permanent ambient globe spin
+                        let sy2 = Math.sin(cam.rotY + (t * 0.2));
+                        let px = nx * cy2 + z1 * sy2;
+                        let pz = -nx * sy2 + z1 * cy2;
+                        let py = y1;
+
+                        // 3D Mouse Repulsion map
+                        if (mouseRef.current) {
+                            const worldMx = (mouseRef.current.x - cx) / cam.zoom;
+                            const worldMy = (mouseRef.current.y - cy) / cam.zoom;
+                            const dx = worldMx - px;
+                            const dy = worldMy - py;
+                            const dist2D = Math.sqrt(dx * dx + dy * dy);
+                            if (dist2D < 150) {
+                                px -= (dx / dist2D) * (150 - dist2D) * 0.5;
+                                py -= (dy / dist2D) * (150 - dist2D) * 0.5;
+                            }
+                        }
+
+                        // Save the final projected 2D screen coordinates and the true depth Z
+                        n.projX = px;
+                        n.projY = py;
+                        n.projZ = pz;
+                    }
+
+                    // Sort back-to-front based on True 3D Z distance!
+                    const sorted = [...nodes].sort((a, b) => a.projZ - b.projZ);
+
+                    // --- DRAW RIPPLES IN THE BACKGROUND FIRST ---
+                    if (active) {
+                        const baseCol = sorted[0]?.color || '#00ffb4';
+                        for (let r = 0; r < 3; r++) {
+                            const rippleT = (t * 2 + r * 2.1) % 6.28;
+                            // Expanded ripple radius
+                            const haloR = 250 + rippleT * 80;
+                            const alpha = Math.max(0, 1 - (rippleT / 6.28));
+                            ctx.beginPath();
+                            ctx.strokeStyle = baseCol;
+                            ctx.globalAlpha = alpha * 0.3; // softer background glow
+                            ctx.lineWidth = 1 + (1 - alpha) * 3;
+                            ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
+                            ctx.stroke();
+                        }
+                        ctx.globalAlpha = 1.0;
+                    }
+
+                    // --- ORGANIC SYNAPSIS CONNECTIONS & PROCESS FLOW LOGIC ---
+                    ctx.lineWidth = 0.5;
+                    // Only calculate connections for ACTIVE nodes to accurately represent the graph and save CPU!
+                    const activeNodesList = sorted.filter(n => n.isActiveNode);
+
+                    for (let i = 0; i < activeNodesList.length; i++) {
+                        for (let j = i + 1; j < activeNodesList.length; j++) {
+                            const n1 = activeNodesList[i];
+                            const n2 = activeNodesList[j];
+                            const dx = n1.projX - n2.projX;
+                            const dy = n1.projY - n2.projY;
+                            const dist = Math.sqrt(dx * dx + dy * dy);
+                            if (dist < 280) { // Slight bump to connect core cluster reliably
+                                const alpha = (1 - dist / 280) * 0.35;
+                                ctx.globalAlpha = alpha;
+                                ctx.strokeStyle = n1.color;
+                                ctx.beginPath();
+                                ctx.moveTo(cx + n1.projX, cy + n1.projY);
+                                const cpX = cx + (n1.projX + n2.projX) / 2 + Math.sin(t * 2 + i) * 40;
+                                const cpY = cy + (n1.projY + n2.projY) / 2 + Math.cos(t * 2 + j) * 40;
+                                ctx.quadraticCurveTo(cpX, cpY, cx + n2.projX, cy + n2.projY);
+                                ctx.stroke();
+
+                                // Real-time FIRING PROCESS FLOW! 
+                                if (active && (i + j + Math.floor(t * 12)) % 15 === 0) {
+                                    const flowT = (t * 3 + i * 0.1) % 1;
+                                    const ptX = Math.pow(1 - flowT, 2) * (cx + n1.projX) + 2 * (1 - flowT) * flowT * cpX + Math.pow(flowT, 2) * (cx + n2.projX);
+                                    const ptY = Math.pow(1 - flowT, 2) * (cy + n1.projY) + 2 * (1 - flowT) * flowT * cpY + Math.pow(flowT, 2) * (cy + n2.projY);
+
+                                    ctx.beginPath();
+                                    ctx.globalAlpha = 1.0;
+                                    ctx.fillStyle = n2.color;
+                                    ctx.arc(ptX, ptY, 1.5, 0, Math.PI * 2);
+                                    ctx.fill();
+
+                                    ctx.beginPath();
+                                    ctx.globalAlpha = 0.6;
+                                    ctx.arc(ptX, ptY, 4, 0, Math.PI * 2);
+                                    ctx.fill();
+                                }
+                                ctx.globalAlpha = 1.0;
+                            }
+                        }
+                    }
+
+                    for (const n of sorted) {
+                        // True 3D depth scaling (objects moving forward become much larger)
+                        const depthScale = Math.max(0.1, 0.6 + (n.projZ / 1800));
+                        const r = n.size * depthScale;
+
+                        // Standby cells fade heavily into the background
+                        ctx.globalAlpha = n.isActiveNode ? 1.0 : (n.isAnomaly ? 0.8 : 0.3);
+
+                        if (n.isActiveNode || n.isAnomaly) {
+                            const pulse = 1 + Math.sin(t * 5 + n.projX * 0.01) * 0.2;
+                            const grad = ctx.createRadialGradient(cx + n.projX, cy + n.projY, 0, cx + n.projX, cy + n.projY, r * 4 * pulse);
+                            grad.addColorStop(0, n.color + (n.isActiveNode ? '60' : '40'));
+                            grad.addColorStop(1, 'transparent');
+                            ctx.fillStyle = grad;
+                            ctx.beginPath();
+                            ctx.arc(cx + n.projX, cy + n.projY, r * 4 * pulse, 0, Math.PI * 2);
+                            ctx.fill();
+
+                            ctx.fillStyle = n.color;
+                            ctx.beginPath();
+                            ctx.arc(cx + n.projX, cy + n.projY, r * pulse, 0, Math.PI * 2);
+                            ctx.fill();
+                        } else {
+                            // Dim white speck for standby cells
+                            ctx.fillStyle = '#ffffff';
+                            ctx.beginPath();
+                            ctx.arc(cx + n.projX, cy + n.projY, r, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+
+                    ctx.restore(); // Restore camera projections
+                    animRef.current = requestAnimationFrame(draw);
+                };
+                draw();
+                return () => {
+                    cancelAnimationFrame(animRef.current);
+                    window.removeEventListener('resize', resize);
+                    canvas.removeEventListener('mousemove', handleMouseMove);
+                    canvas.removeEventListener('mousedown', handleMouseDown);
+                    window.removeEventListener('mouseup', handleMouseUp);
+                    canvas.removeEventListener('mouseleave', handleMouseLeave);
+                    canvas.removeEventListener('wheel', handleWheel);
+                    canvas.removeEventListener('touchstart', handleTouchStart);
+                    canvas.removeEventListener('touchmove', handleTouchMove);
+                    canvas.removeEventListener('touchend', handleTouchEnd);
+                };
+            }, [nodes, active, similarity]);
+
+            return <canvas ref={canvasRef} className="w-full h-full block touch-none" />;
+        };
+
+        function App() {
+            const [status, setStatus] = useState(null);
+            const [metrics, setMetrics] = useState({});
+            const [comparison, setComparison] = useState(null);
+            const [view, setView] = useState('lattice');
+            const [logs, setLogs] = useState([]);
+
+            useEffect(() => {
+                const poll = setInterval(async () => {
+                    try {
+                        const [sRes, mRes, cRes] = await Promise.all([
+                            fetch(`${API_BASE}/assimilation_status`).then(r => r.json()),
+                            fetch(`${API_BASE}`).then(r => r.json()),
+                            fetch(`${API_BASE}/comparison`).then(r => r.json())
+                        ]);
+                        setStatus(sRes);
+                        setMetrics(mRes);
+                        setComparison(cRes);
+                        setLogs(mRes.activity_log || []);
+                    } catch (e) {
+                        console.warn("Neural Signal Interrupted");
+                    }
+                }, 800);
+                return () => clearInterval(poll);
+            }, []);
+
+            return (
+                <div className="flex flex-col md:flex-row h-screen p-4 pb-6 md:p-6 gap-4 relative z-20 overflow-hidden">
+                    {/* Header: Mobile + Desktop Title */}
+                    <div className="md:hidden glass rounded-2xl p-4 flex justify-between items-center z-50">
+                        <h1 className="text-lg font-extrabold tracking-tighter">DATAG <span className="text-[9px] opacity-40 ml-1">PRIME</span></h1>
+                        <div className="flex gap-4">
+                            <div className="text-right">
+                                <div className="text-[8px] opacity-40 uppercase tracking-widest font-bold">DNA ENTROPY</div>
+                                <div className="text-xs font-mono">{(metrics.entropy || "0.00").toString().slice(0, 6)}</div>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-[8px] opacity-40 uppercase tracking-widest font-bold">INDEPENDENCE</div>
+                                <div className={`text-xs font-mono font-bold ${status?.avg_similarity >= 0.5 ? 'text-purple-400' : 'neon-text'}`}>{(status?.avg_similarity * 100 || 0).toFixed(1)}%</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="hidden md:flex w-80 glass rounded-3xl p-8 flex-col gap-8 neon-border border-white/10">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center neon-border"><span className="neon-text animate-pulse">⚡</span></div>
+                            <div>
+                                <h1 className="text-xl font-extrabold tracking-tighter">DATAG <span className="text-[10px] opacity-40 ml-1">PRIME</span></h1>
+                                <div className="text-[10px] text-emerald-400 font-mono">NEURAL_STATUS: ACTIVE</div>
+                            </div>
+                        </div>
+                        <section>
+                            <label className="text-[10px] font-bold opacity-30 tracking-[0.2em] mb-4 block">ACTIVE PHASE</label>
+                            <div className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                                <div className="neon-text font-bold text-lg mb-1">{status?.phase || "BOOTING..."}</div>
+                                <div className="text-xs opacity-50 leading-relaxed font-light">{status?.phase_2_status || "Initializing neural weights..."}</div>
+                            </div>
+                        </section>
+                        <section className="flex-1 overflow-hidden flex flex-col">
+                            <label className="text-[10px] font-bold opacity-30 tracking-[0.2em] mb-4 block">ACTIVITY LOG</label>
+                            <div className="flex-1 overflow-y-auto space-y-2 font-mono text-[10px] text-gray-400">
+                                {logs.map((log, i) => <div key={i} className="border-b border-white/5 pb-1 opacity-70 hover:opacity-100 transition-opacity">{log}</div>)}
+                            </div>
+                        </section>
+                        <div className="flex flex-col gap-2">
+                            <button onClick={() => setView('lattice')} className={`w-full py-3 rounded-xl font-bold text-xs tracking-widest transition-all ${view === 'lattice' ? 'bg-emerald-500/20 text-emerald-400 neon-border' : 'bg-white/5 opacity-40 hover:opacity-100'}`}>CORE LATTICE</button>
+                            <button onClick={() => setView('comparison')} className={`w-full py-3 rounded-xl font-bold text-xs tracking-widest transition-all ${view === 'comparison' ? 'bg-emerald-500/20 text-emerald-400 neon-border' : 'bg-white/5 opacity-40 hover:opacity-100'}`}>SHADOW FEED</button>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col gap-2 md:gap-6">
+                        <header className="hidden md:flex h-24 glass rounded-3xl items-center px-10 border border-white/10">
+                            <div className="flex gap-16">
+                                <div><div className="text-[10px] font-bold opacity-30 tracking-widest mb-1">DNA ENTROPY</div><div className="text-2xl font-extrabold font-mono text-white/90">{(metrics.entropy || "0.0000").toString().slice(0, 10)}</div></div>
+                                <div><div className="text-[10px] font-bold opacity-30 tracking-widest mb-1">CELL COUNT</div><div className="text-2xl font-extrabold font-mono">{metrics.total_records || 3833}</div></div>
+                                <div><div className="text-[10px] font-bold opacity-30 tracking-widest mb-1">INDEPENDENCE</div><div className={`text-2xl font-extrabold font-mono ${status?.avg_similarity >= 0.5 ? 'text-purple-400' : 'neon-text'}`}>{(status?.avg_similarity * 100 || 0).toFixed(1)}%</div></div>
+                            </div>
+                        </header>
+
+                        <main className="flex-1 glass rounded-[30px] md:rounded-[40px] relative overflow-hidden flex items-center justify-center neon-border bg-black/40">
+                            {view === 'lattice' ? (
+                                <div className="w-full h-full relative">
+                                    <OrganismLattice
+                                        active={true}
+                                        anomalyCount={metrics.anomaly_count || 0}
+                                        activeAdapters={metrics.active_adapters || 0}
+                                        totalCells={metrics.total_records || 3833}
+                                        similarity={status?.avg_similarity || 0}
+                                    />
+                                    <div className="absolute top-6 left-6 md:top-10 md:left-10 pointer-events-none">
+                                        <h2 className="text-lg md:text-2xl font-bold tracking-widest opacity-80 uppercase">Neural Organism</h2>
+                                        <p className="text-[10px] md:text-xs font-light text-emerald-500/60 mt-1 md:mt-2">Simulating Methodology Cells...</p>
+                                    </div>
+                                    <div className="absolute top-6 right-6 md:top-10 md:right-10 text-right pointer-events-none glass p-3 md:p-4 rounded-2xl border border-white/10 max-w-[140px] md:max-w-none">
+                                        {(() => {
+                                            const sim = status?.avg_similarity || 0;
+                                            let dotColor = '#00ffb4';
+                                            let shadowCol = '#00ffb4';
+                                            let textColClass = 'text-[#00ffb4]';
+                                            let phaseText = 'Phase 1';
+                                            if (sim >= 0.9) { dotColor = '#fbbf24'; shadowCol = '#fbbf24'; textColClass = 'text-amber-400'; phaseText = 'Phase 3'; }
+                                            else if (sim >= 0.5) { dotColor = '#8b5cf6'; shadowCol = '#a855f7'; textColClass = 'text-purple-400'; phaseText = 'Phase 2'; }
+
+                                            return (
+                                                <div className="flex items-center justify-end gap-2 md:gap-3 mb-2 md:mb-3">
+                                                    <span className="text-[8px] md:text-[10px] font-bold tracking-widest opacity-60 uppercase text-white/50">Active <span className={textColClass}>({phaseText})</span></span>
+                                                    <span className={`${textColClass} font-mono text-xs`}>{metrics.active_adapters || 0}</span>
+                                                    <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: dotColor, boxShadow: `0 0 8px ${shadowCol}` }}></div>
+                                                </div>
+                                            );
+                                        })()}
+                                        <div className="flex items-center justify-end gap-2 md:gap-3">
+                                            <span className="text-[8px] md:text-[10px] font-bold tracking-widest opacity-60 uppercase text-white/50">Anomalous</span>
+                                            <span className="text-red-400 font-mono text-xs">{metrics.anomaly_count || 0}</span>
+                                            <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="w-full h-full p-4 md:p-8 flex flex-col gap-6 overflow-hidden">
+                                    <div className="flex justify-between items-center shrink-0 border-b border-white/5 pb-4">
+                                        <h2 className="text-lg md:text-2xl font-extrabold tracking-tighter mix-blend-plus-lighter neon-text">SHADOW FEED</h2>
+                                        <div className="hidden md:block text-[10px] font-mono glass px-4 py-2 rounded-full border border-white/20 max-w-[50%] overflow-hidden text-ellipsis whitespace-nowrap text-white/70">
+                                            {comparison?.filename || "AWAITING FILE..."}
+                                        </div>
+                                    </div>
+
+                                    <ShadowDiffMatrix teacher={comparison?.teacher} student={comparison?.student} iaTruth={comparison?.ia_truth} />
+
+                                    <div className="shrink-0 glass p-5 rounded-2xl border border-white/5 bg-black/50 shadow-2xl">
+                                        <div className="flex justify-between items-center text-[10px] font-bold mb-3 tracking-widest text-white/50">
+                                            <span>INDELIBLE SIGNAL (SIMILARITY)</span>
+                                            <span className="text-xl text-emerald-400 font-mono">{(comparison?.similarity * 100 || 0).toFixed(2)}%</span>
+                                        </div>
+                                        <div className="kinetic-bar h-2 rounded-full bg-white/5 border border-black p-[1px]">
+                                            <div className="kinetic-progress rounded-full" style={{ width: `${(comparison?.similarity || 0) * 100}%`, backgroundImage: 'linear-gradient(90deg, #10b981, #3b82f6)' }}></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </main>
+
+                        {/* Mobile Action Bar */}
+                        <div className="md:hidden glass rounded-2xl p-4 flex justify-between gap-4">
+                            <button onClick={() => setView('lattice')} className={`flex-1 py-3 rounded-xl font-bold text-[10px] tracking-widest transition-all ${view === 'lattice' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-white/40'}`}>CORE</button>
+                            <button onClick={() => setView('comparison')} className={`flex-1 py-3 rounded-xl font-bold text-[10px] tracking-widest transition-all ${view === 'comparison' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-white/5 text-white/40'}`}>SHADOW</button>
+                        </div>
+                    </div>
+
+                    {/* Activity Log - Mobile Drawer-style overlay bottom sheet */}
+                    {logs.length > 0 && (
+                        <div className="md:hidden absolute bottom-24 left-6 right-6 pointer-events-none opacity-40 hover:opacity-100 transition-opacity">
+                            <div className="glass p-3 rounded-xl border border-white/10 text-[9px] font-mono h-16 overflow-hidden">
+                                {logs.slice(0, 3).map((l, i) => <div key={i} className="truncate text-emerald-400/80">{l}</div>)}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+
+</html>
