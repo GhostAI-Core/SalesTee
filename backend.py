@@ -268,6 +268,100 @@ def suggest_similar(req: SuggestRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ChatRequest(BaseModel):
+    message: str
+    product: str | None = None
+    history: list = []          # [{"user": "...", "tee": "..."}] last N turns
+    used_cells: list = []       # cell_ids fired in this session (dedup)
+
+class ChatResponse(BaseModel):
+    response: str
+    cell_id: str
+    sim: float
+    product: str | None
+    miss: bool
+
+@app.post("/chat", response_model=ChatResponse)
+def chat(req: ChatRequest):
+    """
+    Stateless chat endpoint. Caller keeps history and used_cells between turns.
+
+    Request:
+      message     — prospect's utterance
+      product     — product slug (e.g. 'voxi', 'easybonds') or null
+      history     — list of {user, tee} dicts from previous turns
+      used_cells  — list of cell_ids already fired this session
+
+    Response:
+      response    — Tee's reply text
+      cell_id     — which cell fired (empty string if miss)
+      sim         — cosine similarity of best hit
+      product     — resolved product slug (may be auto-detected)
+      miss        — true if sim was below miss threshold (caller should log)
+    """
+    from collections import deque
+    from chat_tee import tee_respond, detect_product_intent, get_products
+    from learn import SIM_MISS
+
+    bridge = DataGBridge.get()
+    if not bridge.ready:
+        raise HTTPException(status_code=503, detail="Substrate not ready")
+
+    message = req.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="message is required")
+
+    product_scope = req.product
+    used = deque(req.used_cells, maxlen=6)
+
+    # Auto-detect product from first message if not scoped
+    if product_scope is None:
+        products = get_products(bridge)
+        if products:
+            intent = detect_product_intent(message, products)
+            if intent:
+                product_scope = intent
+
+    response, cid, sim = tee_respond(
+        bridge, message, req.history, used, product_scope
+    )
+
+    return ChatResponse(
+        response=response,
+        cell_id=cid or '',
+        sim=round(float(sim), 4),
+        product=product_scope,
+        miss=sim < SIM_MISS,
+    )
+
+
+@app.get("/chat/open/{product}")
+def chat_open(product: str):
+    """
+    Returns Tee's opening message for a given product.
+    Call this when a session starts to get the first thing Tee says.
+    """
+    from chat_tee import pretty_product
+    bridge = DataGBridge.get()
+    if not bridge.ready:
+        raise HTTPException(status_code=503, detail="Substrate not ready")
+
+    # Verify product exists
+    known = {
+        getattr(c, 'source_table', '')[len('meth_product_'):]
+        for c in bridge.substrate.methodology_cells.values()
+        if getattr(c, 'source_table', '').startswith('meth_product_')
+    }
+    if product not in known:
+        raise HTTPException(status_code=404, detail=f"Unknown product: {product}")
+
+    opening = (
+        f"Hi, I'm Tee — a sales agent. I'm here to talk about "
+        f"{pretty_product(product)}. What would you like to know?"
+    )
+    return {"product": product, "opening": opening}
+
+
 @app.get("/stats")
 def stats():
     """Return corpus size and namespace breakdown."""
@@ -285,6 +379,88 @@ def stats():
         return {"total": len(cells), "by_table": by_table}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/transcribe")
+async def transcribe_audio(file: UploadFile = File(...)):
+    """
+    Accept a browser audio blob (webm/wav), transcribe via faster-whisper,
+    return {text: "..."}.
+    """
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+    suffix = '.webm'
+    if file.filename:
+        _, ext = os.path.splitext(file.filename)
+        if ext: suffix = ext
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+        shutil.copyfileobj(file.file, tmp)
+        tmp_path = tmp.name
+
+    try:
+        from faster_whisper import WhisperModel
+        model = WhisperModel('tiny.en', device='cpu', compute_type='int8')
+        segments, _ = model.transcribe(tmp_path, language='en', beam_size=1)
+        text = ' '.join(s.text for s in segments).strip()
+        return {"text": text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+@app.get("/misses")
+def get_misses(top_n: int = 50, product: str | None = None):
+    """Return top unanswered queries from the miss log."""
+    from learn import miss_report
+    rows = miss_report(top_n=top_n)
+    if product:
+        rows = [r for r in rows if r.get('product') == product]
+    return {"misses": rows}
+
+
+@app.post("/misses/answer")
+def answer_miss(req: QACell):
+    """
+    Submit an answer for a missed query. Saves directly to the substrate
+    and optionally removes the query from the miss log.
+    Product is inferred from req.source_table (e.g. 'product_voxi').
+    """
+    from learn import SIM_MISS
+    bridge = DataGBridge.get()
+    if not bridge.ready:
+        raise HTTPException(status_code=503, detail="Substrate not ready")
+
+    question = req.question.strip()
+    answer   = req.answer.strip()
+    if not question or not answer:
+        raise HTTPException(status_code=400, detail="question and answer are required")
+
+    table = req.source_table.strip() or 'conversation'
+
+    status, sim, existing = _check_duplicate(bridge, question, table)
+    if status == 'duplicate':
+        raise HTTPException(status_code=409, detail={
+            "reason": "duplicate",
+            "sim": sim,
+            "existing": existing,
+        })
+
+    cid = bridge.save_cell(
+        description=question,
+        content=answer,
+        source_table=table,
+        confidence=0.95,
+        energy=150.0,
+    )
+
+    result = {"status": "saved", "cell_id": cid}
+    if status == 'near_dupe':
+        result["warning"] = f"Similar to existing (sim={sim}): \"{existing}\""
+    return result
 
 
 if __name__ == "__main__":

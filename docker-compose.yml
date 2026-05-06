@@ -1,0 +1,38 @@
+version: "3.9"
+
+services:
+  tee-api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount data_store so new cells persist outside the container
+      - ./data_store:/app/data_store
+      # Mount model cache so sentence-transformers isn't re-downloaded on restart
+      - tee-st-cache:/app/.st_cache
+      - tee-hf-cache:/app/.hf_cache
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  voxi-ui:
+    build:
+      context: ./voxi_ui
+      dockerfile: Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - tee-api
+
+  voxi-admin:
+    build:
+      context: ./voxi_admin
+      dockerfile: Dockerfile
+    ports:
+      - "5174:80"
+    depends_on:
+      - tee-api
+
+volumes:
+  tee-st-cache:
+  tee-hf-cache:

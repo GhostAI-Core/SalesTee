@@ -43,9 +43,11 @@ class DataGBridge:
     Singleton bridge to Training Tee's substrate.
     Loaded once at startup, shared across all neurons.
 
-    Encoding is fully handled by TrainingTeeEncoder — no external model dependency.
+    Encoding: sentence-transformers all-MiniLM-L6-v2 (384-dim, pre-trained on 1B pairs).
+    Falls back to TrainingTeeEncoder (128-dim) if sentence-transformers unavailable.
     """
     _instance = None
+    _ST_MODEL = 'all-MiniLM-L6-v2'
 
     @classmethod
     def get(cls) -> 'DataGBridge':
@@ -56,7 +58,8 @@ class DataGBridge:
     def __init__(self):
         self._ready    = False
         self.substrate = None
-        self._enc      = None   # TrainingTeeEncoder
+        self._enc      = None   # TrainingTeeEncoder (fallback only)
+        self._st_enc   = None   # SentenceTransformer (primary)
         self._dec      = None   # TrainingTeeDecoder
         self._tok      = None   # TrainingTeeTokenizer
         self._device   = 'cpu'
@@ -99,6 +102,15 @@ class DataGBridge:
         print(f"[Bridge] {len(self.substrate.methodology_cells):,} cells online", flush=True)
 
     def _load_models(self):
+        # ── Primary: sentence-transformers ────────────────────────────────────
+        try:
+            from sentence_transformers import SentenceTransformer
+            self._st_enc = SentenceTransformer(self._ST_MODEL)
+            print(f"[Bridge] SentenceTransformer ({self._ST_MODEL}, 384-dim) loaded")
+        except Exception as e:
+            print(f"[Bridge] sentence-transformers unavailable ({e}), falling back to TrainingTeeEncoder")
+
+        # ── Fallback: custom TrainingTeeEncoder (still used for decoder generation) ──
         import torch
         _neural = os.path.join(_TRAINING_TEE_ROOT, 'src', 'neural')
         if _neural not in sys.path:
@@ -112,7 +124,7 @@ class DataGBridge:
         dec_path = os.path.join(_MODEL_DIR, 'decoder.pt')
 
         if not all(os.path.exists(p) for p in (tok_path, enc_path, dec_path)):
-            print("[Bridge] Models not found — run train_training_tee.py first")
+            print("[Bridge] Custom models not found — run train_training_tee.py first")
             return
 
         self._device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -132,14 +144,21 @@ class DataGBridge:
         self._dec.load_state_dict(torch.load(dec_path, map_location=self._device))
         self._dec.to(self._device).eval()
 
-        print(f"[Bridge] TrainingTeeEncoder + TrainingTeeDecoder loaded ({self._device})")
+        if self._st_enc is None:
+            print(f"[Bridge] TrainingTeeEncoder loaded as primary ({self._device})")
+        else:
+            print(f"[Bridge] TrainingTeeDecoder loaded ({self._device})")
 
     # ── Encoding ─────────────────────────────────────────────────────────────
 
     def encode(self, text: str) -> np.ndarray:
-        """Text → 128-dim L2-normalised vector via TrainingTeeEncoder."""
+        """Text → L2-normalised vector. Uses SentenceTransformer (384-dim) if available,
+        falls back to TrainingTeeEncoder (128-dim)."""
+        if self._st_enc is not None:
+            vec = self._st_enc.encode(text, normalize_embeddings=True, show_progress_bar=False)
+            return vec.astype(np.float32)
         if self._enc is None:
-            raise RuntimeError("Encoder not loaded")
+            raise RuntimeError("No encoder loaded")
         import torch
         ids  = self._tok.encode(text, max_len=128)
         tens = torch.tensor([ids], dtype=torch.long, device=self._device)
@@ -273,7 +292,8 @@ class DataGBridge:
         cid = f"meth_{source_table}_{uuid.uuid4().hex[:12]}"
         dna = self.encode(description).tolist()
 
-        dim, rank = 128, 4
+        dim  = len(dna)   # matches encoder output dim (384 for ST, 128 for fallback)
+        rank = 4
         cell = {
             "id":               cid,
             "content":          content,

@@ -22,7 +22,6 @@ import asyncio
 import argparse
 import tempfile
 import textwrap
-import threading
 from collections import deque
 
 import numpy as np
@@ -116,27 +115,55 @@ def load_whisper():
     return _whisper_model
 
 
-def record_until_enter() -> np.ndarray:
-    """Record mic audio until user presses ENTER. Returns float32 array."""
-    frames = []
-    stop_event = threading.Event()
+def record_vad(
+    silence_sec: float = 1.5,
+    min_speech_sec: float = 0.3,
+    rms_threshold: float = 0.01,
+    max_sec: float = 30.0,
+) -> np.ndarray:
+    """
+    Record from mic using voice activity detection.
+    - Waits for speech to begin (RMS > threshold)
+    - Stops when speech ends (RMS < threshold for silence_sec)
+    - Returns float32 array (may be empty if nothing heard within max_sec)
+    """
+    chunk = int(SAMPLE_RATE * 0.1)   # 100 ms chunks
+    frames: list = []
+    speech_started = False
+    silent_chunks  = 0
+    silence_limit  = int(silence_sec / 0.1)
+    max_chunks     = int(max_sec / 0.1)
+    total_chunks   = 0
 
-    def _stream_cb(indata, frame_count, time_info, status):
-        frames.append(indata.copy())
+    print("  \033[90m[Listening...]\033[0m", end='\r', flush=True)
 
-    stream = sd.InputStream(
-        samplerate=SAMPLE_RATE,
-        channels=CHANNELS,
-        dtype='float32',
-        callback=_stream_cb,
-    )
+    with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype='float32') as stream:
+        while total_chunks < max_chunks:
+            data, _ = stream.read(chunk)
+            rms = float(np.sqrt(np.mean(data ** 2)))
+            total_chunks += 1
 
-    print(f"\n  {'─'*20}")
-    print("  [Recording — press ENTER to stop]", end='', flush=True)
-    with stream:
-        input()   # blocks until ENTER
+            if not speech_started:
+                if rms > rms_threshold:
+                    speech_started = True
+                    frames.append(data.copy())
+                    print("  \033[90m[Speaking...]\033[0m ", end='\r', flush=True)
+            else:
+                frames.append(data.copy())
+                if rms < rms_threshold:
+                    silent_chunks += 1
+                    if silent_chunks >= silence_limit:
+                        break
+                else:
+                    silent_chunks = 0
 
-    audio = np.concatenate(frames, axis=0).flatten() if frames else np.array([], dtype='float32')
+    print("                        ", end='\r', flush=True)  # clear line
+    if not frames:
+        return np.array([], dtype='float32')
+    audio = np.concatenate(frames, axis=0).flatten()
+    # Require minimum speech length before returning
+    if len(audio) < SAMPLE_RATE * min_speech_sec:
+        return np.array([], dtype='float32')
     return audio
 
 
@@ -288,8 +315,7 @@ def main():
 
     print(f"\n{'='*W}")
     print(f"  TEE — VOICE CHAT")
-    print(f"  Hold ENTER → speak → release ENTER to send.")
-    print(f"  Type 'quit' to end.")
+    print(f"  Speak naturally — Tee listens automatically.")
     print(f"{'='*W}")
 
     voice = pick_voice(args.voice)
@@ -332,69 +358,28 @@ def main():
     session_log.product = product_scope
 
     last_response = ''
-    SILENCE_TIMEOUT = 10.0  # seconds before Tee checks in
+    LISTEN_TIMEOUT = 10.0   # seconds of silence before Tee checks in
 
     while True:
-        print(f"\n  \033[90mPress ENTER to speak, or type:\033[0m", end=' ', flush=True)
+        # VAD listen — waits up to LISTEN_TIMEOUT for speech to start
+        audio = record_vad(silence_sec=1.5, max_sec=LISTEN_TIMEOUT)
 
-        # Wait for input with a timeout — if user takes >2s, Tee checks in
-        import select, msvcrt, time as _time
-
-        t_start = _time.monotonic()
-        got_input = False
-
-        # On Windows we poll msvcrt for a keypress rather than select()
-        while True:
-            if msvcrt.kbhit():
-                got_input = True
-                break
-            if _time.monotonic() - t_start > SILENCE_TIMEOUT:
-                break
-            _time.sleep(0.05)
-
-        if not got_input:
+        if len(audio) == 0:
+            # No speech detected — check in once, then end call if still nothing
             checkin = "Still there?"
-            print(f"\n  \033[90m[Tee: {checkin}]\033[0m")
-            speak(checkin, voice)
-            # Wait a further 2 seconds — if still nothing, end the call
-            t2 = _time.monotonic()
-            got_input2 = False
-            print(f"  \033[90mPress ENTER to speak, or type:\033[0m", end=' ', flush=True)
-            while True:
-                if msvcrt.kbhit():
-                    got_input2 = True
-                    break
-                if _time.monotonic() - t2 > SILENCE_TIMEOUT:
-                    break
-                _time.sleep(0.05)
-            if not got_input2:
+            tee_say(checkin, voice)
+            audio2 = record_vad(silence_sec=1.5, max_sec=LISTEN_TIMEOUT)
+            if len(audio2) == 0:
                 goodbye = "Okay, I'll leave it there. Call back anytime."
-                print(f"\n  \033[90m[Tee: {goodbye}]\033[0m")
-                speak(goodbye, voice)
+                tee_say(goodbye, voice)
                 break
-            try:
-                raw_input = input().strip()
-            except (EOFError, KeyboardInterrupt):
-                break
-        else:
-            try:
-                raw_input = input().strip()
-            except (EOFError, KeyboardInterrupt):
-                break
+            audio = audio2
 
-        if raw_input.lower() in ('quit', 'exit', 'q', 'bye'):
-            break
-
-        if raw_input == '':
-            audio = record_until_enter()
-            raw_input = transcribe(audio)
-            if not raw_input:
-                print("  [Nothing heard — try again]")
-                continue
-            print(f"  \033[90m[You said: {raw_input!r}]\033[0m")
-
+        raw_input = transcribe(audio)
         if not raw_input:
+            print("  \033[90m[Nothing heard — listening again]\033[0m")
             continue
+        print(f"  \033[90m[You: {raw_input}]\033[0m")
 
         # Meta commands — handled without retrieval
         meta = handle_meta(raw_input, last_response)

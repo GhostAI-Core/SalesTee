@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+voxi_ui
+voxi_admin
+ingestor_ui
+*.md
+.claude
