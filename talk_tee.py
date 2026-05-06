@@ -11,8 +11,9 @@ Usage:
     python talk_tee.py --debug                      # show retrieval details
     python talk_tee.py --list-voices                # show available voices
 
-Hold ENTER to start recording, release to stop and send.
+Press ENTER to speak. Tee responds, then immediately listens again.
 Type 'quit' at the prompt to end the session.
+Meta commands handled inline: "repeat that", "what time is it", "who are you".
 """
 
 import os
@@ -64,6 +65,41 @@ from chat_tee import (
     build_query,
     W,
 )
+
+
+# ── Meta-question handler ─────────────────────────────────────────────────────
+
+_META_TIME = {
+    'what time is it', 'what is the time', 'tell me the time',
+    'what\'s the time', 'whats the time', 'time please', 'the time',
+}
+_META_REPEAT = {
+    'repeat that', 'say that again', 'can you repeat that', 'what did you say',
+    'pardon', 'come again', 'i didn\'t catch that', 'i didnt catch that',
+    'repeat', 'again',
+}
+_META_WHO = {
+    'who are you', 'what are you', 'what is your name', 'your name',
+    'are you a bot', 'are you ai', 'are you human', 'are you real',
+    'who am i talking to', 'introduce yourself',
+}
+
+
+def handle_meta(text: str, last_response: str) -> str | None:
+    """
+    Returns a response string if the input is a meta command, else None.
+    Meta commands are handled inline without touching the retrieval engine.
+    """
+    import datetime
+    clean = text.lower().strip().rstrip('?.!')
+    if clean in _META_TIME:
+        now = datetime.datetime.now().strftime('%I:%M %p').lstrip('0')
+        return f"It's {now}."
+    if clean in _META_REPEAT:
+        return last_response if last_response else "I haven't said anything yet."
+    if clean in _META_WHO:
+        return None  # let identity retrieval handle these — Tee has good cells for this
+    return None
 
 
 # ── STT ───────────────────────────────────────────────────────────────────────
@@ -129,17 +165,50 @@ def speak(text: str, voice: str):
 
 async def _speak_async(text: str, voice: str):
     import edge_tts
-    with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
-        tmp_path = f.name
-    try:
-        communicate = edge_tts.Communicate(text, voice)
-        await communicate.save(tmp_path)
-        _play_audio(tmp_path)
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
+    import re
+
+    # 1. Split into sentences to allow streaming start
+    sentences = re.split(r'(?<=[.!?]) +', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    if not sentences:
+        return
+
+    # 2. Queue for pre-fetched audio files
+    audio_queue = asyncio.Queue(maxsize=3)
+
+    async def producer():
+        """Generates audio files in the background."""
+        for s in sentences:
+            with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+                tmp_path = f.name
+            try:
+                communicate = edge_tts.Communicate(s, voice)
+                await communicate.save(tmp_path)
+                await audio_queue.put(tmp_path)
+            except Exception as e:
+                print(f"  [TTS Error] {e}")
+                if os.path.exists(tmp_path):
+                    os.unlink(tmp_path)
+        await audio_queue.put(None)  # Sentinel
+
+    async def consumer():
+        """Plays audio files as they become available."""
+        while True:
+            path = await audio_queue.get()
+            if path is None:
+                break
+            try:
+                # Play in a thread to keep the event loop responsive
+                await asyncio.to_thread(_play_audio, path)
+            finally:
+                try:
+                    os.unlink(path)
+                except Exception:
+                    pass
+            audio_queue.task_done()
+
+    # Run producer and consumer in parallel
+    await asyncio.gather(producer(), consumer())
 
 
 def _play_audio(path: str):
@@ -262,12 +331,56 @@ def main():
     _ct.tee_print = _orig_print
     session_log.product = product_scope
 
+    last_response = ''
+    SILENCE_TIMEOUT = 2.0  # seconds before Tee checks in
+
     while True:
-        print(f"\n  \033[90mPress ENTER to speak, or type a message:\033[0m", end=' ', flush=True)
-        try:
-            raw_input = input().strip()
-        except (EOFError, KeyboardInterrupt):
-            break
+        print(f"\n  \033[90mPress ENTER to speak, or type:\033[0m", end=' ', flush=True)
+
+        # Wait for input with a timeout — if user takes >2s, Tee checks in
+        import select, msvcrt, time as _time
+
+        t_start = _time.monotonic()
+        got_input = False
+
+        # On Windows we poll msvcrt for a keypress rather than select()
+        while True:
+            if msvcrt.kbhit():
+                got_input = True
+                break
+            if _time.monotonic() - t_start > SILENCE_TIMEOUT:
+                break
+            _time.sleep(0.05)
+
+        if not got_input:
+            checkin = "Still there?"
+            print(f"\n  \033[90m[Tee: {checkin}]\033[0m")
+            speak(checkin, voice)
+            # Wait a further 2 seconds — if still nothing, end the call
+            t2 = _time.monotonic()
+            got_input2 = False
+            print(f"  \033[90mPress ENTER to speak, or type:\033[0m", end=' ', flush=True)
+            while True:
+                if msvcrt.kbhit():
+                    got_input2 = True
+                    break
+                if _time.monotonic() - t2 > SILENCE_TIMEOUT:
+                    break
+                _time.sleep(0.05)
+            if not got_input2:
+                goodbye = "Okay, I'll leave it there. Call back anytime."
+                print(f"\n  \033[90m[Tee: {goodbye}]\033[0m")
+                speak(goodbye, voice)
+                break
+            try:
+                raw_input = input().strip()
+            except (EOFError, KeyboardInterrupt):
+                break
+        else:
+            try:
+                raw_input = input().strip()
+            except (EOFError, KeyboardInterrupt):
+                break
 
         if raw_input.lower() in ('quit', 'exit', 'q', 'bye'):
             break
@@ -281,6 +394,13 @@ def main():
             print(f"  \033[90m[You said: {raw_input!r}]\033[0m")
 
         if not raw_input:
+            continue
+
+        # Meta commands — handled without retrieval
+        meta = handle_meta(raw_input, last_response)
+        if meta is not None:
+            last_response = meta
+            tee_say(meta, voice)
             continue
 
         if product_scope is None:
@@ -304,6 +424,7 @@ def main():
             session_log.log(user=raw_input, tee=response, sim=sim, cell_id=cid)
 
         history.append({'user': raw_input, 'tee': response})
+        last_response = response
         tee_say(response, voice)
 
     session_log.close()
