@@ -332,7 +332,7 @@ def main():
     session_log.product = product_scope
 
     last_response = ''
-    SILENCE_TIMEOUT = 2.0  # seconds before Tee checks in
+    SILENCE_TIMEOUT = 10.0  # seconds before Tee checks in
 
     while True:
         print(f"\n  \033[90mPress ENTER to speak, or type:\033[0m", end=' ', flush=True)
