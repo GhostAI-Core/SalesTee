@@ -254,14 +254,18 @@ class DataGBridge:
 
     def save_cell(self, description: str, content: str,
                   source_table: str = 'conversation',
-                  confidence: float = 0.85, energy: float = 120.0) -> str:
+                  confidence: float = 0.85, energy: float = 120.0,
+                  internal: bool = False) -> str:
         """
         Encode + persist a new cell to Training Tee's substrate.
         Returns the cell_id.
 
         source_table should be one of:
-          'identity', 'code', 'reasoning', 'conversation'
+          'identity', 'reasoning', 'conversation', 'product_<name>'
         The 'meth_' prefix is added automatically.
+
+        internal=True marks cells that inform training but are never
+        shown directly to a prospect (e.g. monologue, internal patience).
         """
         import uuid, json as _json
         import numpy.random as npr
@@ -284,7 +288,11 @@ class DataGBridge:
             "activation_count": 0,
             "last_activated":   0.0,
             "birth_time":       time.time(),
-            "meta":             {"description": description},
+            "meta":             {
+                "description":    description,
+                "internal":       internal,
+                "prospect_facing": not internal,
+            },
         }
         path = os.path.join(_TRAINING_TEE_ROOT, 'data_store', 'methodology', f"{cid}.json")
         with open(path, 'w') as f:

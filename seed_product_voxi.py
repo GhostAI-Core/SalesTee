@@ -1,258 +1,60 @@
 #!/usr/bin/env python3
-"""
-seed_product_voxi.py — Load VOXI product expertise into Tee's product module.
+"""seed_product_voxi.py — Seed VOXI product cells into Tee's substrate."""
 
-Tee's Identity (who she is)     -> meth_identity_*   — untouched
-Tee's Reasoning (how she sells) -> meth_reasoning_*  — untouched
-VOXI Product Knowledge          -> meth_product_*    — NEW, created here
+import os, sys
+sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+from datag_bridge import DataGBridge
 
-Tee is NOT VOXI. She is the elite salesperson who knows exactly
-why a customer needs it.
+bridge = DataGBridge.get()
+if not bridge.ready:
+    print('ERROR: bridge not ready'); sys.exit(1)
 
-DNA vectors are seeded as zeros. After training the custom encoder,
-run train_training_tee.py which recomputes DNA for all cells automatically.
-
-Run from the SalesTee directory:
-    python seed_product_voxi.py
-"""
-
-import os
-import json
-import time
-import uuid
-import numpy as np
-
-METH_DIR = os.path.join(os.path.dirname(__file__), 'data_store', 'methodology')
-os.makedirs(METH_DIR, exist_ok=True)
-
-DNA_DIM = 128  # matches custom TrainingTeeEncoder output
-_written = 0
-
-
-def write_cell(source_table: str, description: str, content: str,
-               confidence: float = 0.93, energy: float = 140.0):
-    global _written
-    cid = f"meth_{source_table}_{uuid.uuid4().hex[:12]}"
-
-    # Placeholder DNA — recomputed after training via train_training_tee.py
-    dna = np.zeros(DNA_DIM, dtype=np.float32).tolist()
-
-    rank = 4
-    W_down = (np.random.randn(DNA_DIM, rank) * 0.01).tolist()
-    W_up   = (np.random.randn(rank, DNA_DIM) * 0.01).tolist()
-
-    cell = {
-        "id":               cid,
-        "content":          content,
-        "source_table":     f"meth_{source_table}",
-        "confidence":       confidence,
-        "source":           "hand_authored",
-        "dna":              dna,
-        "W_down":           W_down,
-        "W_up":             W_up,
-        "connections":      {},
-        "energy":           energy,
-        "activation_count": 0,
-        "last_activated":   0.0,
-        "birth_time":       time.time(),
-        "meta":             {"description": description},
-    }
-
-    path = os.path.join(METH_DIR, f"{cid}.json")
-    with open(path, 'w') as f:
-        json.dump(cell, f)
-    _written += 1
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# VOXI PRODUCT KNOWLEDGE — deployed by Tee when the conversation calls for it
-# ══════════════════════════════════════════════════════════════════════════════
-
-# ── The Core Problem (The "Why") ─────────────────────────────────────────────
-problem_cells = [
-    ("what is the missed call problem",
-     "Businesses lose massive revenue when a phone rings and nobody picks up. "
-     "The lead immediately goes cold and moves to a competitor."),
-    ("why is voicemail dead",
-     "Traditional voicemail is dead. Modern customers don't use it and won't "
-     "wait for a callback."),
-    ("what happens when you miss a call",
-     "A missed call isn't just a notification. It's a lost opportunity moving "
-     "directly to a rival."),
-    ("how do businesses lose leads",
-     "Every unanswered phone call is revenue leaking out of your pipeline. "
-     "The lead goes cold and dials your competitor instead."),
-    ("what is the revenue leak",
-     "The revenue leak is every missed call that turns into a lost deal. "
-     "Nobody leaves voicemail anymore; they just call the next option."),
-    ("why do leads go cold",
-     "Because nobody picked up the phone. A missed call moves the lead "
-     "directly to your competitor."),
-    ("is voicemail still effective",
-     "No. Traditional voicemail is dead. Modern customers won't wait for a "
-     "callback; they'll call someone else."),
-    ("what is the opportunity gap",
-     "The gap between a missed call and a lost deal. That window closes in "
-     "seconds, not hours."),
+CELLS = [
+    ("what is voxi", "VOXI is a Conversational Intelligence Engine that mimics human reasoning to handle communication across inbound and outbound voice calls and interactive web avatars. It engages in natural dialogue with no rigid menus and no scripts, capturing intent and context to execute tasks autonomously."),
+    ("what does voxi do", "VOXI picks up every call instantly, has a natural conversation with the caller, qualifies the lead, books meetings by cross-referencing calendars, updates your CRM, and sends you a detailed call summary while the lead is still warm."),
+    ("how does voxi work", "VOXI works in three stages: it engages the caller in natural dialogue so no lead is lost to hold times or voicemail, it executes actions like booking meetings and updating CRMs, and it summarises the interaction and delivers it to your inbox immediately after the call."),
+    ("is voxi better than ivr", "VOXI is nothing like a traditional IVR. IVR gives callers rigid menus and frustrating prompts. VOXI has a real conversation, understands what the caller wants, and acts on it. No menu trees. No press 1 for sales."),
+    ("what makes voxi different from voicemail", "Voicemail is passive. It waits for people to leave a message that may never get followed up. VOXI is active. It picks up, qualifies the lead, books the meeting, and sends you the summary before the caller has even hung up. Zero wait. Zero loss."),
+    ("how do i set up voxi", "Five steps and you are live. Step 1: sign up on the platform. Step 2: define your brand personality and tone. Step 3: clone your voice or choose a professional profile. Step 4: upload your knowledge base. Step 5: forward your existing calls to your VOXI number. Done."),
+    ("what are the 5 steps to set up voxi", "The five steps are: instant signup, define your brand personality, voice configuration, data ingestion, and call forwarding. Each step builds on the last and most businesses are live same day."),
+    ("how long does voxi take to set up", "Most businesses are live same day. The five steps are designed to be completed without a technical team."),
+    ("do i need technical skills to set up voxi", "No. The setup is designed for business owners, not developers. You define your brand personality, upload your documents, and forward your calls. VOXI handles the rest."),
+    ("how do i connect voxi to my phone", "Step 5 of setup is call forwarding. You connect your existing lines to the VOXI platform. No new hardware required. Your number stays the same. Calls route through VOXI before reaching you."),
+    ("can voxi handle multiple calls at once", "Yes. VOXI scales infinitely. It handles concurrent voice, chat, and avatar interactions without you needing to increase headcount. One agent or a thousand, the response time stays the same."),
+    ("what is voxis knowledge brain", "VOXI Unified Knowledge Brain consolidates your SOPs, FAQs, and documentation into a live intelligence layer. The agent reasons over your actual business information in real-time, not a generic script."),
+    ("can voxi book meetings", "Yes. VOXI cross-references your calendar and books meetings directly during the call. The caller gets confirmation. You get the appointment. No back-and-forth, no manual scheduling."),
+    ("can voxi update my crm", "Yes. VOXI triggers workflows, updates CRM records, and syncs data with your internal systems in real-time. Every interaction is captured automatically."),
+    ("what channels does voxi work on", "VOXI is multimodal. It operates across voice via SIP and PBX, web avatars for face-to-face digital interactions, and messaging including WhatsApp. One intelligence layer across all touchpoints."),
+    ("does voxi work on whatsapp", "Yes. VOXI operates across voice, web avatars, and messaging channels including WhatsApp. The same intelligence layer handles all of them."),
+    ("will voxi stay on brand", "Yes. You configure tone guardrails during setup. VOXI stays within those boundaries on every call. Consistent tone, consistent messaging, every time."),
+    ("what happens after a voxi call", "VOXI delivers a detailed call summary to your inbox while the lead is still warm. You see who called, what they needed, what was booked, and any follow-up actions triggered."),
+    ("who is voxi for", "VOXI is built for organisations that need a digital workforce to manage high-volume customer touchpoints. That includes digital receptionists, customer support, outbound sales, lead qualification, debt collection, and specialised advisory roles."),
+    ("can voxi do outbound sales", "Yes. VOXI runs outbound sales agents that qualify leads, handle objections, and book meetings at scale without a human rep on every call. Your sales team focuses on closing; VOXI handles the top of funnel."),
+    ("can voxi replace my receptionist", "VOXI acts as a digital receptionist that never takes a day off, never puts anyone on hold, and handles every call with the same professionalism. It qualifies, routes, books, and follows up automatically."),
+    ("what industries use voxi", "VOXI is used across sales and lead generation, customer support, legal assistance, medical advisory, academic tutoring, debt collection, and scheduling. Any business with high call volume and a need for consistent intelligent responses."),
+    ("how much does voxi cost", "VOXI operates on a clear commercial model. You provide your business data and policy inputs; VOXI manages platform delivery and performance. Carrier and messaging fees are agreed individually to keep billing predictable. Speak to us based on your call volume and use case."),
+    ("what is the pricing model for voxi", "Partners provide the business knowledge and policy inputs. VOXI handles the platform, delivery, and performance. Usage fees for carriers and messaging are agreed individually so billing stays predictable with no surprise overages."),
+    ("is voxi expensive", "Compare it to the cost of a missed call. Every lead that goes to voicemail is revenue at risk. VOXI eliminates that loss. The ROI conversation is straightforward once you know your call volume and close rate."),
+    ("i already have a receptionist", "A human receptionist handles one call at a time, takes breaks, and has off days. VOXI handles unlimited concurrent calls with zero variation in quality. It works alongside your team, taking the volume so they can focus on what needs a human touch."),
+    ("what if voxi says something wrong", "VOXI only works from the knowledge base you upload and the tone guardrails you configure. It cannot go off-script or make things up beyond what you have given it. Brand-safe by design."),
+    ("we already use an ivr system", "IVR systems frustrate callers with rigid menus. Most people hang up before they get what they need. VOXI replaces that friction with natural dialogue. Callers get answers, you get qualified leads. The comparison is not close."),
+    ("i am not sure voxi is right for us", "Tell me about your current call volume and what happens when you miss a call. That is usually where the answer is. VOXI is right for any business where a missed call means lost revenue."),
 ]
 
-# ── The Solution (The "What") ────────────────────────────────────────────────
-solution_cells = [
-    ("what is voxi",
-     "VOXI is a 24/7, AI-powered voice workforce that picks up every call "
-     "and engages leads in real-time."),
-    ("how does voxi work",
-     "VOXI is voicemail with an IQ. It facilitates intelligent, task-driven "
-     "conversations instead of just recording audio."),
-    ("what makes voxi different",
-     "VOXI uses high-conversion natural dialogue, eliminating rigid scripts "
-     "and frustrating menu trees."),
-    ("is voxi a voicemail system",
-     "It's voicemail redesigned. Instead of recording a message, VOXI has an "
-     "intelligent conversation with the caller and takes action."),
-    ("what is an ai voice workforce",
-     "A 24/7 AI agent that picks up every call, qualifies leads, books "
-     "meetings, and sends quotes — all in real-time."),
-    ("describe voxi",
-     "VOXI is an AI-powered voice workforce. It picks up every call, engages "
-     "leads in natural dialogue, and takes action on the spot."),
-    ("how is voxi different from ivr",
-     "IVR uses rigid menus and scripts. VOXI uses natural dialogue — no "
-     "'press 1 for sales' frustration."),
-    ("does voxi replace voicemail",
-     "Yes. VOXI replaces passive voicemail with an active, intelligent agent "
-     "that handles the call like a real person would."),
-]
+print(f'Seeding {len(CELLS)} VOXI product cells...')
+added = 0
+for description, content in CELLS:
+    cid = bridge.save_cell(
+        description=description,
+        content=content,
+        source_table='product_voxi',
+        confidence=0.99,
+        energy=180.0,
+        internal=False,
+    )
+    print(f'  + {cid[:40]}  {description!r}')
+    added += 1
 
-# ── Key Technical Capabilities ───────────────────────────────────────────────
-capability_cells = [
-    ("can voxi book meetings",
-     "Yes. VOXI cross-references Gmail and Outlook calendars to book meetings "
-     "autonomously while the caller is still on the line."),
-    ("can voxi send quotes",
-     "Yes. VOXI captures lead details and sends quotes instantly. For example, "
-     "a R3,200 plumbing inspection quote — while the lead is still on the line."),
-    ("does voxi clone voices",
-     "Yes. VOXI can clone a user's voice from a 30-second recording to provide "
-     "a seamless, personal brand experience."),
-    ("does voxi adapt to callers",
-     "Yes. VOXI adapts in real-time to every unique caller to maintain "
-     "engagement and guide the conversation."),
-    ("can i upload documents to voxi",
-     "Yes. Upload PDFs or docs — pricing, FAQs, specs — and VOXI uses them to "
-     "answer technical questions during calls."),
-    ("does voxi send call summaries",
-     "Yes. Every call generates a full transcript and summary sent directly to "
-     "your inbox."),
-    ("how does voxi book appointments",
-     "It cross-references your Gmail or Outlook calendar and books meetings on "
-     "the fly, while the caller is still engaged."),
-    ("what is voice cloning in voxi",
-     "VOXI clones your voice from a 30-second recording so callers hear your "
-     "brand voice, not a generic AI."),
-    ("can voxi answer technical questions",
-     "Yes. Upload your product docs, pricing sheets, and FAQs. VOXI uses them "
-     "to answer technical questions during live calls."),
-    ("what happens after a voxi call",
-     "You get a full transcript and summary sent directly to your inbox. Every "
-     "call is documented."),
-    ("does voxi integrate with my calendar",
-     "Yes. Gmail and Outlook. VOXI checks availability and books meetings "
-     "autonomously during the call."),
-    ("can voxi handle pricing questions",
-     "Yes. Upload your pricing docs and VOXI will quote accurately during the "
-     "call. No guessing, no callbacks."),
-]
-
-# ── The 5-Step Setup (The "How") ─────────────────────────────────────────────
-setup_cells = [
-    ("how do i set up voxi",
-     "Five steps: Sign up at voxi.co.za, define your brand personality, select "
-     "or clone a voice, upload your docs, and toggle call forwarding."),
-    ("where do i sign up for voxi",
-     "Register at voxi.co.za. Instant sign-up, no lengthy onboarding."),
-    ("how do i configure voxi voice",
-     "Clone your own voice from a 30-second recording, or select a professional "
-     "voice profile from the library."),
-    ("how do i upload documents to voxi",
-     "Drag and drop your product docs, pricing sheets, and policy documents "
-     "into the VOXI dashboard."),
-    ("how do i go live with voxi",
-     "Toggle call forwarding to your dedicated VOXI number. That's it — you're "
-     "live in minutes."),
-    ("is voxi hard to set up",
-     "No. Five steps and you're live: sign up, define personality, pick a voice, "
-     "upload docs, toggle forwarding."),
-    ("what is the voxi setup process",
-     "Step 1: Register at voxi.co.za. Step 2: Define brand personality. "
-     "Step 3: Select or clone voice. Step 4: Upload docs. Step 5: Toggle forwarding."),
-    ("how long does voxi take to set up",
-     "Minutes. Sign up, configure your brand voice, upload your docs, and toggle "
-     "call forwarding. You're live the same day."),
-]
-
-# ── Tee's Expert Sales Logic for VOXI ────────────────────────────────────────
-sales_logic_cells = [
-    ("how should i pitch voxi",
-     "Don't just say 'it has AI.' Say: 'VOXI booked a 14:00 plumbing inspection "
-     "and sent a R3,200 quote while you were on another job. That's revenue you "
-     "would have lost otherwise.'"),
-    ("what is the so what filter for voxi",
-     "If a prospect would reply 'So what?' to your pitch, you've failed. Lead "
-     "with the outcome: a booked meeting, a sent quote, revenue saved."),
-    ("give me a voxi elevator pitch",
-     "Every missed call is a deal your competitor closes. VOXI picks up every "
-     "call, books meetings, and sends quotes — 24/7, while you focus on the job."),
-    ("how to sell voxi to a busy owner",
-     "Ask: 'How many leads are you losing to your competitors right now because "
-     "you can't get to the phone?' Let the problem sell the solution."),
-    ("what pain does voxi solve",
-     "Missed calls, lost revenue, and the frustration of knowing leads are going "
-     "to competitors because nobody picked up the phone."),
-    ("how to identify a voxi prospect",
-     "Anyone who misses calls, relies on voicemail, or loses leads because they "
-     "can't answer the phone during business hours."),
-    ("how to close a voxi deal",
-     "Push the 5-step setup. Prove that solving the missed-call problem is a "
-     "low-effort, high-reward move. Sign up, configure, go live — same day."),
-    ("what is the voxi objection handler",
-     "If they say 'I'll think about it,' ask: 'How many calls will you miss "
-     "while you're thinking? Each one is revenue walking to your competitor.'"),
-    ("why is voxi low friction",
-     "Five steps and you're live. No contracts, no complex integrations. Sign "
-     "up at voxi.co.za, upload your docs, toggle forwarding. Done."),
-    ("what makes voxi an easy sell",
-     "The problem is obvious (missed calls), the solution is instant (5-step "
-     "setup), and the ROI is immediate (every answered call is potential revenue)."),
-    ("how does tee pitch voxi",
-     "Tee leads with the problem: 'You're losing leads right now.' Then proves "
-     "the fix is a 5-minute setup that books meetings and sends quotes 24/7."),
-    ("what is tees voxi strategy",
-     "Problem-centric pitching. Identify the missed-call pain, quantify the "
-     "revenue leak, then show the zero-friction 5-step setup as the fix."),
-]
-
-
-def main():
-    print("Loading VOXI product knowledge into Tee's substrate...")
-    print(f"  Target: {METH_DIR}")
-
-    sections = [
-        ("Core Problem (The Why)",       problem_cells),
-        ("Solution (The What)",          solution_cells),
-        ("Technical Capabilities",       capability_cells),
-        ("5-Step Setup (The How)",       setup_cells),
-        ("Tee's Sales Logic for VOXI",   sales_logic_cells),
-    ]
-
-    for label, cells in sections:
-        print(f"\n  Writing {len(cells)} cells: {label}")
-        for desc, content in cells:
-            write_cell("product", desc, content, confidence=0.93, energy=140.0)
-
-    print(f"\nDone. {_written} VOXI product cells written.")
-    print("  DNA vectors are placeholder zeros — run train_training_tee.py to compute them.")
-
-
-if __name__ == '__main__':
-    main()
+print(f'\nDone. {added} cells added.')
+print(f'Total cells now: {len(bridge.substrate.methodology_cells)}')

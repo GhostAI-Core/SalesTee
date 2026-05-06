@@ -1,0 +1,6 @@
+{"ts": 1778046475.3602753, "user": "Tell me how it works.", "tee": "Tell me when you're ready to move to the next point.", "sim": 0.6466, "cell_id": "meth_identity_d8d882c89dcd", "product": "easybonds"}
+{"ts": 1778046485.5736606, "user": "How does easy bons work?", "tee": "Once we have all your documents, the bank typically provides an outcome within 3 to 5 working days.", "sim": 0.6999, "cell_id": "meth_product_easybonds_420a7af8d36a", "product": "easybonds"}
+{"ts": 1778046502.086512, "user": "What is easy bones?", "tee": "Bridging finance is a short-term payout we provide so you can access 80% of your funds within 7-10 days, long before the bank finishes the formal registration process.", "sim": 1.0, "cell_id": "meth_product_easybonds_f522fd8a0c8f", "product": "easybonds"}
+{"ts": 1778046521.6764884, "user": "about the product.", "tee": "Take your time. I want you to be sure about this.", "sim": 0.7087, "cell_id": "meth_identity_d1642b1e34b3", "product": "easybonds"}
+{"ts": 1778046532.046601, "user": "Tell me about the product.", "tee": "I'm still here. Just giving you some space to think.", "sim": 0.8656, "cell_id": "meth_identity_96e723157d80", "product": "easybonds"}
+{"ts": 1778048895.7875602, "type": "summary", "session_id": "1b33025eec06", "turns": 5, "product": "easybonds"}

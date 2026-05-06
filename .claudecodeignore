@@ -1,0 +1,14 @@
+.git/
+.venv/
+__pycache__/
+models/
+data_store/
+*.pyc
+*.pyo
+*.pyd
+.db
+.sqlite
+.log
+node_modules/
+dist/
+build/

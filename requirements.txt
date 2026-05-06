@@ -2,3 +2,9 @@ torch
 sentence-transformers
 numpy
 tqdm
+transformers
+sentencepiece
+faster-whisper
+edge-tts
+sounddevice
+soundfile
